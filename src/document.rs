@@ -1,8 +1,9 @@
 //! Format detection and enum dispatch over open documents.
 //!
-//! Phase 0 ships only the text loader. DOCX, ODS, and XLSX variants appear
-//! here when their features are enabled and their modules land; the enum is
-//! `#[non_exhaustive]` so those additions are not breaking.
+//! Phase 0 ships the text loader; Phase 3 adds the rich Word package loader
+//! behind the `docx` feature. Spreadsheet variants appear when their features
+//! are enabled; the enum is `#[non_exhaustive]` so those additions are not
+//! breaking.
 
 use std::path::Path;
 
@@ -10,12 +11,22 @@ use crate::editor::Editor;
 use crate::error::DocumentError;
 use crate::text::TextDocument;
 
+#[cfg(feature = "docx")]
+use crate::rich::RichDocument;
+
 /// Opened document, enum-dispatched so the UI need not box trait objects.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Document {
     /// Plain text and Markdown.
     Text(TextDocument),
+    /// DOCX and ODT Word packages, when the `docx` feature is enabled.
+    ///
+    /// The package model is large (tens of kilobytes of styles and body
+    /// content), so it is boxed to keep `Document` itself small enough to
+    /// pass around without dominating stack frames.
+    #[cfg(feature = "docx")]
+    Rich(Box<RichDocument>),
 }
 
 impl Document {
@@ -23,6 +34,8 @@ impl Document {
     pub fn display_name(&self) -> String {
         match self {
             Document::Text(t) => t.display_name(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.display_name(),
         }
     }
 
@@ -30,6 +43,21 @@ impl Document {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Document::Text(t) => t.path(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.path(),
+        }
+    }
+
+    /// Line-oriented prose surface shared by text and rich documents.
+    ///
+    /// Returns `None` when the variant is not a prose editor (for example a
+    /// future spreadsheet pane). Callers that only understand lines use this
+    /// instead of matching every prose variant.
+    pub fn prose_surface(&mut self) -> Option<&mut TextDocument> {
+        match self {
+            Document::Text(t) => Some(t),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => Some(r.surface_mut()),
         }
     }
 }
@@ -38,84 +66,112 @@ impl Editor for Document {
     fn cursor(&self) -> crate::editor::Cursor {
         match self {
             Document::Text(t) => t.cursor(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.cursor(),
         }
     }
 
     fn selection(&self) -> Option<(crate::editor::Cursor, crate::editor::Cursor)> {
         match self {
             Document::Text(t) => t.selection(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.selection(),
         }
     }
 
     fn select_all(&mut self) {
         match self {
             Document::Text(t) => t.select_all(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.select_all(),
         }
     }
 
     fn clear_selection(&mut self) {
         match self {
             Document::Text(t) => t.clear_selection(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.clear_selection(),
         }
     }
 
     fn move_cursor(&mut self, motion: crate::editor::Motion, extend: bool) {
         match self {
             Document::Text(t) => t.move_cursor(motion, extend),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.move_cursor(motion, extend),
         }
     }
 
     fn insert_char(&mut self, c: char) {
         match self {
             Document::Text(t) => t.insert_char(c),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.insert_char(c),
         }
     }
 
     fn insert_str(&mut self, s: &str) {
         match self {
             Document::Text(t) => t.insert_str(s),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.insert_str(s),
         }
     }
 
     fn delete_back(&mut self) {
         match self {
             Document::Text(t) => t.delete_back(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.delete_back(),
         }
     }
 
     fn delete_forward(&mut self) {
         match self {
             Document::Text(t) => t.delete_forward(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.delete_forward(),
         }
     }
 
     fn is_dirty(&self) -> bool {
         match self {
             Document::Text(t) => t.is_dirty(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.is_dirty(),
         }
     }
 
     fn save(&mut self, path: Option<&Path>) -> Result<(), DocumentError> {
         match self {
             Document::Text(t) => t.save(path),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.save(path),
         }
     }
 
     fn undo(&mut self) -> bool {
         match self {
             Document::Text(t) => t.undo(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.undo(),
         }
     }
 
     fn redo(&mut self) -> bool {
         match self {
             Document::Text(t) => t.redo(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.redo(),
         }
     }
 
     fn text_projection(&self) -> String {
         match self {
             Document::Text(t) => t.text_projection(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.text_projection(),
         }
     }
 }
@@ -151,9 +207,19 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
             }
         }
         #[cfg(feature = "docx")]
-        "docx" | "odt" => Err(DocumentError::UnsupportedFormat(format!(
-            "{ext} support arrives in Phase 3"
-        ))),
+        "docx" | "odt" => {
+            if path.exists() {
+                Ok(Document::Rich(Box::new(RichDocument::open(path)?)))
+            } else {
+                let format = match ext.as_str() {
+                    "odt" => crate::rich::RichFormat::Odt,
+                    _ => crate::rich::RichFormat::Docx,
+                };
+                let mut r = RichDocument::new(format);
+                r.adopt_path(path);
+                Ok(Document::Rich(Box::new(r)))
+            }
+        }
         #[cfg(feature = "xlsx")]
         "xlsx" | "ods" | "xls" => Err(DocumentError::UnsupportedFormat(format!(
             "{ext} support arrives in Phase 4"

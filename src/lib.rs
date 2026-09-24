@@ -24,6 +24,8 @@ mod error;
 mod history;
 mod io;
 mod keymap;
+#[cfg(feature = "docx")]
+mod rich;
 mod text;
 mod ui;
 
@@ -33,6 +35,8 @@ pub use editor::{Cursor, Editor, Motion};
 pub use error::DocumentError;
 pub use history::History;
 pub use keymap::{format_chord, Action, Chord, Keymap};
+#[cfg(feature = "docx")]
+pub use rich::{RichDocument, RichFormat};
 pub use text::TextDocument;
 pub use ui::draw;
 

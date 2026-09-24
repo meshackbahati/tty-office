@@ -94,8 +94,15 @@ impl App {
     pub fn set_viewport(&mut self, h: usize, w: usize) {
         self.view_h = h.max(1);
         self.view_w = w.max(1);
+        self.scroll_to_cursor();
+    }
+
+    fn scroll_to_cursor(&mut self) {
+        let (h, w) = (self.view_h, self.view_w);
         match &mut self.doc {
-            Document::Text(t) => t.scroll_to_cursor(self.view_h, self.view_w),
+            Document::Text(t) => t.scroll_to_cursor(h, w),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.scroll_to_cursor(h, w),
         }
     }
 
@@ -306,9 +313,7 @@ impl App {
             }
             other => self.doc.move_cursor(other, extend),
         }
-        match &mut self.doc {
-            Document::Text(t) => t.scroll_to_cursor(self.view_h, self.view_w),
-        }
+        self.scroll_to_cursor();
     }
 
     fn do_save(&mut self, path: Option<&Path>) {
@@ -329,87 +334,90 @@ impl App {
     }
 
     fn cut_line(&mut self) {
-        match &mut self.doc {
-            Document::Text(t) => {
-                let mut buf = String::new();
-                t.cut_current_line(&mut buf);
-                self.cutbuffer = buf;
-                self.message = "Cut line".to_string();
-            }
-        }
+        let Some(surface) = self.doc.prose_surface() else {
+            self.message = "Cut line is unavailable for this document type".to_string();
+            return;
+        };
+        let mut buf = String::new();
+        surface.cut_current_line(&mut buf);
+        self.cutbuffer = buf;
+        self.message = "Cut line".to_string();
     }
 
     fn wrap_selection(&mut self, marker: &str) {
-        match &mut self.doc {
-            Document::Text(t) => {
-                if let Some((a, b)) = t.selection_range() {
-                    if a < b {
-                        let inner = t.rope().slice(a..b).to_string();
-                        let replacement = format!("{marker}{inner}{marker}");
-                        t.replace_range(a, b, &replacement);
-                        self.message.clear();
-                        return;
-                    }
-                }
-                // No selection: tell the user rather than guessing a word.
-                self.message = format!("Select text to apply {marker}");
+        let Some(surface) = self.doc.prose_surface() else {
+            self.message = format!("Select text to apply {marker}");
+            return;
+        };
+        if let Some((a, b)) = surface.selection_range() {
+            if a < b {
+                let inner = surface.rope().slice(a..b).to_string();
+                let replacement = format!("{marker}{inner}{marker}");
+                surface.replace_range(a, b, &replacement);
+                self.message.clear();
+                return;
             }
         }
+        // No selection: tell the user rather than guessing a word.
+        self.message = format!("Select text to apply {marker}");
     }
 
     fn find_next(&mut self, needle: &str) {
-        match &mut self.doc {
-            Document::Text(t) => {
-                let from = t.cursor_char().saturating_add(1);
-                match t.find(needle, from) {
-                    Some((start, end)) => {
-                        t.set_cursor_range(start, end);
-                        t.scroll_to_cursor(self.view_h, self.view_w);
-                        self.message = format!("Found {needle}");
-                    }
-                    None => self.message = format!("Not found: {needle}"),
-                }
+        let Some(surface) = self.doc.prose_surface() else {
+            self.message = format!("Not found: {needle}");
+            return;
+        };
+        let from = surface.cursor_char().saturating_add(1);
+        match surface.find(needle, from) {
+            Some((start, end)) => {
+                surface.set_cursor_range(start, end);
+                surface.scroll_to_cursor(self.view_h, self.view_w);
+                self.message = format!("Found {needle}");
             }
+            None => self.message = format!("Not found: {needle}"),
         }
     }
 
     fn replace_all(&mut self) {
-        match &mut self.doc {
-            Document::Text(t) => {
-                let needle = self.last_find.clone();
-                let replacement = self.replace_with.clone();
-                if needle.is_empty() {
-                    self.message = "Replace cancelled".to_string();
-                    return;
-                }
-                // Collect non-overlapping matches first so a replacement that
-                // itself contains the needle cannot re-match and spin.
-                let mut spans = Vec::new();
-                let mut cursor = 0usize;
-                while let Some((a, b)) = t.find_no_wrap(&needle, cursor) {
-                    spans.push((a, b));
-                    cursor = b.max(a + 1);
-                }
-                let count = spans.len();
-                // Replace from the end so earlier character indices stay valid.
-                for (a, b) in spans.into_iter().rev() {
-                    t.replace_range(a, b, &replacement);
-                }
-                self.message = format!("Replaced {count} occurrence(s)");
-            }
+        let needle = self.last_find.clone();
+        let replacement = self.replace_with.clone();
+        if needle.is_empty() {
+            self.message = "Replace cancelled".to_string();
+            return;
         }
+        let Some(surface) = self.doc.prose_surface() else {
+            self.message = "Replace is unavailable for this document type".to_string();
+            return;
+        };
+        // Collect non-overlapping matches first so a replacement that
+        // itself contains the needle cannot re-match and spin.
+        let mut spans = Vec::new();
+        let mut cursor = 0usize;
+        while let Some((a, b)) = surface.find_no_wrap(&needle, cursor) {
+            spans.push((a, b));
+            cursor = b.max(a + 1);
+        }
+        let count = spans.len();
+        // Replace from the end so earlier character indices stay valid.
+        for (a, b) in spans.into_iter().rev() {
+            surface.replace_range(a, b, &replacement);
+        }
+        self.message = format!("Replaced {count} occurrence(s)");
     }
 
     fn position_message(&mut self) -> String {
-        match &mut self.doc {
-            Document::Text(t) => {
-                let line = t.cursor_line() + 1;
-                let col = t.cursor_display_col() + 1;
-                let words = t.word_count();
-                let dirty = if t.is_dirty() { "modified" } else { "saved" };
-                format!("Ln {line}, Col {col}, Words {words}, {dirty}")
-            }
-        }
+        let Some(surface) = self.doc.prose_surface() else {
+            return "position is unavailable for this document type".to_string();
+        };
+        let line = surface.cursor_line() + 1;
+        let col = surface.cursor_display_col() + 1;
+        let words = surface.word_count();
+        let dirty = if surface.is_dirty() {
+            "modified"
+        } else {
+            "saved"
+        };
+        format!("Ln {line}, Col {col}, Words {words}, {dirty}")
     }
 
     /// Prompt label plus buffer for the status line.

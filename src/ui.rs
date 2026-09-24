@@ -12,7 +12,6 @@ use ratatui::Frame;
 use unicode_width::UnicodeWidthChar;
 
 use crate::app::{App, Mode};
-use crate::document::Document;
 use crate::editor::Editor;
 
 /// Accent used for the filename and active hints.
@@ -49,18 +48,25 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
 }
 
 fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
-    // Phase 0: Document has only the Text variant; Phase 3 and Phase 4 add
-    // arms here when Rich and Sheet arrive.
-    #[allow(clippy::infallible_destructuring_match)]
-    let doc = match &mut app.doc {
-        Document::Text(doc) => doc,
+    // Text and Rich share a line-oriented surface; Phase 4 adds a grid pane
+    // for Sheet rather than forcing cells through this renderer.
+    let (selection, rowoff, coloff, cursor_line, cursor_col, line_count) = {
+        let surface = match app.doc.prose_surface() {
+            Some(s) => s,
+            None => {
+                frame.render_widget(Paragraph::new(""), area);
+                return;
+            }
+        };
+        (
+            surface.selection_range(),
+            surface.rowoff(),
+            surface.coloff(),
+            surface.cursor_line(),
+            surface.cursor_display_col(),
+            surface.line_count(),
+        )
     };
-    let selection = doc.selection_range();
-    let rowoff = doc.rowoff();
-    let coloff = doc.coloff();
-    let cursor_line = doc.cursor_line();
-    let cursor_col = doc.cursor_display_col();
-    let line_count = doc.line_count();
     let height = area.height as usize;
     let width = area.width as usize;
 
@@ -71,8 +77,16 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             lines.push(Line::from(""));
             continue;
         }
-        let raw = doc.line_text(line_idx);
-        let line_start = doc.rope().line_to_char(line_idx);
+        let (raw, line_start) = {
+            let surface = app
+                .doc
+                .prose_surface()
+                .expect("prose surface checked above");
+            (
+                surface.line_text(line_idx),
+                surface.line_char_start(line_idx),
+            )
+        };
         lines.push(render_line(
             &raw,
             line_start,
@@ -208,12 +222,13 @@ fn push_char<'a>(
 fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let name = app.doc.display_name();
     let dirty = if app.doc.is_dirty() { " [+]" } else { "" };
-    let (line, col, words) = match &mut app.doc {
-        Document::Text(t) => (
+    let (line, col, words) = match app.doc.prose_surface() {
+        Some(t) => (
             t.cursor_line() + 1,
             t.cursor_display_col() + 1,
             t.word_count(),
         ),
+        None => (1, 1, 0),
     };
     let mode = match app.mode {
         Mode::Help => "HELP",

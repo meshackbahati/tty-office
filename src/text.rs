@@ -104,6 +104,31 @@ impl TextDocument {
         })
     }
 
+    /// Replace the buffer with `text`, leaving the document clean.
+    ///
+    /// Used when a rich document rebuilds its editing surface from a package
+    /// projection, so that load is not reported as an edit.
+    pub fn load_clean(&mut self, text: &str) {
+        self.rope = Rope::from_str(text);
+        self.path = None;
+        self.dirty = false;
+        self.cursor = 0;
+        self.anchor = None;
+        self.rowoff = 0;
+        self.coloff = 0;
+        self.goal_col = 0;
+        self.history = History::new();
+        self.word_count = None;
+    }
+
+    /// Clear the dirty flag after the caller has persisted this buffer's
+    /// content through another path (for example, writing the projection back
+    /// into a rich package). History, cursor, and scroll are left untouched so
+    /// undo after save behaves as it does for a plain text save.
+    pub fn mark_saved(&mut self) {
+        self.dirty = false;
+    }
+
     /// Path this document was opened from, when known.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
@@ -217,6 +242,11 @@ impl TextDocument {
         line.len_chars().saturating_sub(usize::from(
             line.char(line.len_chars().saturating_sub(1)) == '\n',
         ))
+    }
+
+    /// Character index of the start of line `idx`.
+    pub fn line_char_start(&self, idx: usize) -> usize {
+        self.rope.line_to_char(idx)
     }
 
     /// Normalized selection range as inclusive-exclusive character indices.
