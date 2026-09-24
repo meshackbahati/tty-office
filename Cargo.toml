@@ -1,0 +1,66 @@
+[package]
+name = "tty-office"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+description = "Pure TTY Document Suite"
+license = "MIT"
+readme = "README.md"
+
+[lib]
+name = "tty_office"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tty-office"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.30.2"
+crossterm = "0.29"
+ropey = "1.6.1"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+unicode-width = "0.1"
+
+# Format backends. Enabled by features; Phase 3 and later wire them up.
+rdocx = { version = "0.14.0", optional = true }
+calamine = { version = "0.36.1", optional = true }
+spreadsheet-ods = { version = "1.0.4", optional = true }
+umya-spreadsheet = { version = "3.1.0", optional = true }
+formualizer = { version = "0.9.3", optional = true }
+zspell = { version = "0.5.5", optional = true }
+ratatui-image = { version = "11.1.0", optional = true }
+typst = { version = "0.15.1", optional = true }
+printpdf = { version = "0.12.8", optional = true }
+
+[features]
+# Default stays empty until Phase 3 and Phase 4 land, so a clean
+# Phase 0 build does not compile the office backends.
+default = []
+docx = ["dep:rdocx"]
+xlsx = [
+    "dep:calamine",
+    "dep:umya-spreadsheet",
+    "dep:spreadsheet-ods",
+    "dep:formualizer",
+]
+proof = ["dep:zspell"]
+image = ["dep:ratatui-image"]
+pdf = ["dep:typst", "dep:printpdf"]
+# Target default once backends exist: ["docx", "xlsx", "proof"]
+full = ["docx", "xlsx", "proof", "image", "pdf"]
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.dev]
+# Office backends are expensive to optimize; keep dev builds responsive.
+opt-level = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
