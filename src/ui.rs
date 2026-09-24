@@ -48,6 +48,11 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
 }
 
 fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
+    #[cfg(feature = "xlsx")]
+    if matches!(app.doc, crate::Document::Sheet(_)) {
+        draw_sheet(frame, app, area);
+        return;
+    }
     // Text and Rich share a line-oriented surface; Phase 4 adds a grid pane
     // for Sheet rather than forcing cells through this renderer.
     let (selection, rowoff, coloff, cursor_line, cursor_col, line_count) = {
@@ -115,6 +120,105 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             frame.set_cursor_position((x, y));
         }
     }
+}
+
+#[cfg(feature = "xlsx")]
+fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
+    use crate::sheet::{CELL_WIDTH, COL_HEADER_H, ROW_GUTTER};
+
+    let (height, width) = (area.height as usize, area.width as usize);
+    if height < COL_HEADER_H + 1 || width <= ROW_GUTTER {
+        frame.render_widget(Paragraph::new(""), area);
+        return;
+    }
+
+    // Snapshot grid geometry so the borrow of the sheet ends before render.
+    let snapshot = {
+        let Some(sheet) = app.doc.sheet_mut() else {
+            frame.render_widget(Paragraph::new(""), area);
+            return;
+        };
+        sheet.scroll_to_cursor(height, width);
+        let (cursor_row, cursor_col) = sheet.cursor_cell();
+        let selection = sheet.selection_rect();
+        let rowoff = sheet.rowoff();
+        let coloff = sheet.coloff();
+        let visible_rows = height.saturating_sub(COL_HEADER_H);
+        let visible_cols = width.saturating_sub(ROW_GUTTER).div_ceil(CELL_WIDTH);
+        let mut rows: Vec<Vec<String>> = Vec::with_capacity(visible_rows);
+        for r in rowoff..rowoff + visible_rows {
+            let mut cols: Vec<String> = Vec::with_capacity(visible_cols);
+            for c in coloff..coloff + visible_cols {
+                cols.push(
+                    sheet
+                        .cell(r, c)
+                        .map(|cell| cell.value.display())
+                        .unwrap_or_default(),
+                );
+            }
+            rows.push(cols);
+        }
+        (
+            cursor_row,
+            cursor_col,
+            selection,
+            rowoff,
+            coloff,
+            rows,
+            visible_cols,
+        )
+    };
+    let (cursor_row, cursor_col, selection, rowoff, coloff, rows, visible_cols) = snapshot;
+
+    let mut lines: Vec<Line<'static>> = Vec::with_capacity(height);
+
+    // Column-letter header row.
+    {
+        let mut header = String::with_capacity(ROW_GUTTER + visible_cols * CELL_WIDTH);
+        header.push_str(&" ".repeat(ROW_GUTTER));
+        for c in coloff..coloff + visible_cols {
+            let name = crate::sheet::SheetDocument::cell_ref(0, c);
+            // cell_ref includes the row number; strip digits for the header.
+            let letters: String = name
+                .chars()
+                .take_while(|ch| ch.is_ascii_alphabetic())
+                .collect();
+            let label = format!("{letters:width$}", width = CELL_WIDTH);
+            header.push_str(&label[..CELL_WIDTH.min(label.len())]);
+        }
+        lines.push(Line::from(header));
+    }
+
+    for (i, row_vals) in rows.iter().enumerate() {
+        let r = rowoff + i;
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        let row_num = format!("{:>5} ", r + 1);
+        spans.push(Span::styled(row_num, Style::default().fg(Color::DarkGray)));
+        for (j, val) in row_vals.iter().enumerate() {
+            let c = coloff + j;
+            let selected = selection
+                .is_some_and(|((r0, c0), (r1, c1))| r >= r0 && r <= r1 && c >= c0 && c <= c1);
+            let is_cursor = r == cursor_row && c == cursor_col;
+            let text = format!("{val:width$}", width = CELL_WIDTH);
+            let text = text.chars().take(CELL_WIDTH).collect::<String>();
+            let style = if selected {
+                selected_style()
+            } else if is_cursor {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            spans.push(Span::styled(text, style));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    let paragraph = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
+    frame.render_widget(paragraph, area);
 }
 
 fn render_line<'a>(
@@ -228,7 +332,30 @@ fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             t.cursor_display_col() + 1,
             t.word_count(),
         ),
-        None => (1, 1, 0),
+        None => {
+            #[cfg(feature = "xlsx")]
+            if let crate::Document::Sheet(sheet) = &app.doc {
+                let (r, c) = sheet.cursor_cell();
+                let ref_str = crate::sheet::SheetDocument::cell_ref(r, c);
+                let left = Line::from(vec![
+                    Span::styled(
+                        format!(" {name}{dirty}"),
+                        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" │ "),
+                    Span::raw(format!("Cell {ref_str}")),
+                ]);
+                let mode = match app.mode {
+                    Mode::Help => "HELP",
+                    Mode::ConfirmQuit => "EXIT?",
+                    Mode::Prompt(_) => "PROMPT",
+                    Mode::Normal => "EDIT",
+                };
+                render_status_bar(frame, area, left, mode);
+                return;
+            }
+            (1, 1, 0)
+        }
     };
     let mode = match app.mode {
         Mode::Help => "HELP",
@@ -246,11 +373,15 @@ fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         Span::raw(" │ "),
         Span::raw(format!("{words} words")),
     ]);
+    render_status_bar(frame, area, left, mode);
+}
+
+fn render_status_bar(frame: &mut Frame<'_>, area: Rect, left: Line<'static>, mode: &str) {
     let right = Line::from(Span::styled(
         format!("{mode} "),
         Style::default().fg(Color::DarkGray),
     ));
-    let bar = ratatui::widgets::Paragraph::new(left).style(Style::default().bg(Color::Black));
+    let bar = Paragraph::new(left).style(Style::default().bg(Color::Black));
     frame.render_widget(bar, area);
     let right_width = right.width() as u16;
     if area.width > right_width {

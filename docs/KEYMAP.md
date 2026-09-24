@@ -57,6 +57,23 @@ in this file; they do not replace the whole table.
 | Backspace | Delete the last prompt character. |
 | Printable keys | Append to the prompt buffer. |
 
+## Spreadsheet keys
+
+When the open document is a spreadsheet, normal-mode keys are interpreted as
+cell operations rather than character insertion.
+
+| Chord | Action |
+|-------|--------|
+| Enter | Open the cell edit prompt for the cursor cell. |
+| Tab | Move the cursor one column to the right. |
+| Printable keys | Start the cell edit prompt with that character. |
+| Backspace, Delete | Clear the selection or delete toward the cursor. |
+| Ctrl+U | Uncut: paste the cutbuffer into the cell edit. |
+| Ctrl+C | Show the cell reference (for example `Cell A1`). |
+
+Inside the cell edit prompt, Enter commits the value and moves down one row;
+an empty commit clears the cell. Esc cancels without changing the cell.
+
 ## Quit confirmation
 
 When the document is dirty, Ctrl+X opens a confirmation. Ctrl+S saves and

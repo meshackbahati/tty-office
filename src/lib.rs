@@ -26,6 +26,8 @@ mod io;
 mod keymap;
 #[cfg(feature = "docx")]
 mod rich;
+#[cfg(feature = "xlsx")]
+mod sheet;
 mod text;
 mod ui;
 
@@ -37,6 +39,8 @@ pub use history::History;
 pub use keymap::{format_chord, Action, Chord, Keymap};
 #[cfg(feature = "docx")]
 pub use rich::{RichDocument, RichFormat};
+#[cfg(feature = "xlsx")]
+pub use sheet::{Cell, CellValue, SheetDocument, SheetFormat};
 pub use text::TextDocument;
 pub use ui::draw;
 

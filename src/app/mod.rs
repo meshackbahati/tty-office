@@ -4,13 +4,16 @@
 //! into document edits or mode changes. It never talks to the terminal
 //! directly, which keeps the event loop and the tests separable.
 
+mod prompts;
+#[cfg(feature = "xlsx")]
+mod sheet_keys;
+
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::{Editor, Motion};
 use crate::error::DocumentError;
-use crate::io::load_rope;
 use crate::keymap::{Action, Keymap};
 use crate::text::TextDocument;
 use crate::Document;
@@ -28,19 +31,23 @@ pub enum Mode {
     Help,
 }
 
-/// Which prompt is active.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Which completion path a line prompt should take on Enter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PromptKind {
-    /// Destination path for save-as.
+    /// Path prompt for writing the current document.
     SaveAs,
-    /// Path of a file to insert at the cursor.
+    /// Path prompt inserting a text file at the cursor.
     ReadFile,
     /// Search needle.
     Find,
-    /// First phase of replace: the needle.
+    /// Search phase of replace: asks for the replacement next.
     ReplaceFind,
-    /// Second phase of replace: the replacement text.
+    /// Replacement text phase of replace.
     ReplaceText,
+    /// Spreadsheet cell entry, commit on Enter.
+    #[cfg(feature = "xlsx")]
+    CellEdit,
 }
 
 /// Application state driven by the event loop.
@@ -97,12 +104,14 @@ impl App {
         self.scroll_to_cursor();
     }
 
-    fn scroll_to_cursor(&mut self) {
+    pub(crate) fn scroll_to_cursor(&mut self) {
         let (h, w) = (self.view_h, self.view_w);
         match &mut self.doc {
             Document::Text(t) => t.scroll_to_cursor(h, w),
             #[cfg(feature = "docx")]
             Document::Rich(r) => r.scroll_to_cursor(h, w),
+            #[cfg(feature = "xlsx")]
+            Document::Sheet(s) => s.scroll_to_cursor(h, w),
         }
     }
 
@@ -121,6 +130,10 @@ impl App {
 
     fn handle_normal(&mut self, key: KeyEvent) {
         let action = self.keymap.resolve(&key);
+        #[cfg(feature = "xlsx")]
+        if self.is_sheet() && self.handle_sheet_normal(action.clone(), key) {
+            return;
+        }
         match action {
             Action::Insert(c) => self.doc.insert_char(c),
             Action::InsertNewline => self.doc.insert_char('\n'),
@@ -218,28 +231,6 @@ impl App {
         }
     }
 
-    fn handle_prompt(&mut self, kind: PromptKind, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => {
-                self.mode = Mode::Normal;
-                self.prompt_buf.clear();
-                self.message.clear();
-            }
-            KeyCode::Enter => {
-                let value = std::mem::take(&mut self.prompt_buf);
-                self.mode = Mode::Normal;
-                self.complete_prompt(kind, value);
-            }
-            KeyCode::Backspace => {
-                self.prompt_buf.pop();
-            }
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.prompt_buf.push(c);
-            }
-            _ => {}
-        }
-    }
-
     fn handle_help(&mut self, key: KeyEvent) {
         if matches!(
             key.code,
@@ -250,55 +241,7 @@ impl App {
         }
     }
 
-    fn complete_prompt(&mut self, kind: PromptKind, value: String) {
-        match kind {
-            PromptKind::SaveAs => {
-                if value.is_empty() {
-                    self.message = "Save As cancelled".to_string();
-                    return;
-                }
-                self.do_save(Some(Path::new(&value)));
-            }
-            PromptKind::ReadFile => {
-                if value.is_empty() {
-                    self.message = "Insert cancelled".to_string();
-                    return;
-                }
-                match load_rope(Path::new(&value)) {
-                    Ok(rope) => {
-                        let text = rope.to_string();
-                        self.doc.insert_str(&text);
-                        self.message = format!("Inserted {value}");
-                    }
-                    Err(err) => self.message = format!("Insert failed: {err}"),
-                }
-            }
-            PromptKind::Find => {
-                if value.is_empty() {
-                    self.message = "Find cancelled".to_string();
-                    return;
-                }
-                self.last_find = value.clone();
-                self.find_next(&value);
-            }
-            PromptKind::ReplaceFind => {
-                if value.is_empty() {
-                    self.message = "Replace cancelled".to_string();
-                    return;
-                }
-                self.last_find = value;
-                self.mode = Mode::Prompt(PromptKind::ReplaceText);
-                self.prompt_label = "Replace with: ".to_string();
-                self.prompt_buf.clear();
-            }
-            PromptKind::ReplaceText => {
-                self.replace_with = value;
-                self.replace_all();
-            }
-        }
-    }
-
-    fn apply_motion(&mut self, motion: Motion, extend: bool) {
+    pub(crate) fn apply_motion(&mut self, motion: Motion, extend: bool) {
         let page = self.view_h;
         match motion {
             Motion::PageUp => {
@@ -316,7 +259,7 @@ impl App {
         self.scroll_to_cursor();
     }
 
-    fn do_save(&mut self, path: Option<&Path>) {
+    pub(crate) fn do_save(&mut self, path: Option<&Path>) {
         let result = match path {
             Some(p) => self.doc.save_as(p),
             None => self.doc.save(None),
@@ -362,50 +305,21 @@ impl App {
         self.message = format!("Select text to apply {marker}");
     }
 
-    fn find_next(&mut self, needle: &str) {
-        let Some(surface) = self.doc.prose_surface() else {
-            self.message = format!("Not found: {needle}");
-            return;
-        };
-        let from = surface.cursor_char().saturating_add(1);
-        match surface.find(needle, from) {
-            Some((start, end)) => {
-                surface.set_cursor_range(start, end);
-                surface.scroll_to_cursor(self.view_h, self.view_w);
-                self.message = format!("Found {needle}");
-            }
-            None => self.message = format!("Not found: {needle}"),
-        }
-    }
-
-    fn replace_all(&mut self) {
-        let needle = self.last_find.clone();
-        let replacement = self.replace_with.clone();
-        if needle.is_empty() {
-            self.message = "Replace cancelled".to_string();
-            return;
-        }
-        let Some(surface) = self.doc.prose_surface() else {
-            self.message = "Replace is unavailable for this document type".to_string();
-            return;
-        };
-        // Collect non-overlapping matches first so a replacement that
-        // itself contains the needle cannot re-match and spin.
-        let mut spans = Vec::new();
-        let mut cursor = 0usize;
-        while let Some((a, b)) = surface.find_no_wrap(&needle, cursor) {
-            spans.push((a, b));
-            cursor = b.max(a + 1);
-        }
-        let count = spans.len();
-        // Replace from the end so earlier character indices stay valid.
-        for (a, b) in spans.into_iter().rev() {
-            surface.replace_range(a, b, &replacement);
-        }
-        self.message = format!("Replaced {count} occurrence(s)");
-    }
-
     fn position_message(&mut self) -> String {
+        #[cfg(feature = "xlsx")]
+        if let Document::Sheet(sheet) = &self.doc {
+            let (row, col) = sheet.cursor_cell();
+            let dirty = if sheet.is_dirty() {
+                "modified"
+            } else {
+                "saved"
+            };
+            return format!(
+                "Cell {}, {}",
+                crate::sheet::SheetDocument::cell_ref(row, col),
+                dirty
+            );
+        }
         let Some(surface) = self.doc.prose_surface() else {
             return "position is unavailable for this document type".to_string();
         };
