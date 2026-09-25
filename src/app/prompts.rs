@@ -60,6 +60,21 @@ impl App {
                 }
                 self.do_save(Some(Path::new(&value)));
             }
+            PromptKind::OpenFile => {
+                if value.is_empty() {
+                    self.message = "Open cancelled".to_string();
+                    return;
+                }
+                match crate::open(Path::new(&value)) {
+                    Ok(doc) => {
+                        let created = Self::new(doc);
+                        *self = created;
+                        let name = self.doc.display_name();
+                        self.message = format!("Opened {name}");
+                    }
+                    Err(err) => self.message = format!("Open failed: {err}"),
+                }
+            }
             PromptKind::ReadFile => {
                 if value.is_empty() {
                     self.message = "Insert cancelled".to_string();

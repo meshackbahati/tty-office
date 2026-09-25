@@ -250,3 +250,24 @@ fn help_text_embeds_keymap_document() {
     assert!(body.contains("Ctrl+X"));
     assert!(body.contains("Where Is"));
 }
+
+#[test]
+fn ctrl_s_on_pathless_document_prompts_for_name() {
+    let mut app = plain_app();
+    app.handle_key(ctrl('s'));
+    assert_eq!(app.mode, Mode::Prompt(PromptKind::SaveAs));
+    assert_eq!(app.prompt_label, "Save As: ");
+    assert_eq!(app.prompt_buf, "untitled.txt");
+}
+
+#[test]
+#[cfg(feature = "docx")]
+fn untitled_document_opens_as_rich_and_suggests_odt() {
+    let mut app = App::new(tty_office::open_optional(None).expect("untitled"));
+    assert!(
+        matches!(app.doc, Document::Rich(_)),
+        "the untitled buffer should be a word document in the default build"
+    );
+    app.handle_key(ctrl('s'));
+    assert_eq!(app.prompt_buf, "untitled.odt");
+}

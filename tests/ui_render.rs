@@ -187,3 +187,16 @@ fn sheet_grid_renders_headers_and_cells() {
     assert!(text.contains('A'), "column header missing: {text}");
     assert!(text.contains("    1 "), "row number missing: {text}");
 }
+
+#[test]
+fn cursor_sits_on_the_first_text_row_below_the_top_hairline() {
+    let mut app = app_with("hello");
+    let backend = TestBackend::new(30, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    // Row 0 holds the hairline that closes the top of the text pane, so the
+    // caret must be placed on row 1, which holds the first document line.
+    // The caret sits after the inserted "hello", hence column 5; the row is
+    // the regression target, since the old code drew it onto the hairline.
+    term.backend_mut().assert_cursor_position((5, 1));
+}

@@ -12,8 +12,8 @@ use crossterm::event::{self, Event};
 use ratatui::DefaultTerminal;
 use tty_office::{draw, open_optional, App};
 
-/// Pure TTY Document Suite — edit TXT and Markdown, with DOCX and spreadsheets
-/// arriving behind feature gates.
+/// Pure TTY Document Suite — word documents, spreadsheets, text, and PDF
+/// export, with a plain-text fallback behind `--no-default-features`.
 #[derive(Parser, Debug)]
 #[command(name = "tty-office", version, about)]
 struct Cli {

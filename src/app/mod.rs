@@ -16,6 +16,7 @@ use crate::editor::{Editor, Motion};
 use crate::error::DocumentError;
 use crate::keymap::{Action, Keymap};
 use crate::page::PageLayout;
+#[cfg(not(feature = "docx"))]
 use crate::text::TextDocument;
 use crate::Document;
 
@@ -38,6 +39,8 @@ pub enum Mode {
 pub enum PromptKind {
     /// Path prompt for writing the current document.
     SaveAs,
+    /// Path prompt opening a document, which replaces the buffer.
+    OpenFile,
     /// Path prompt inserting a text file at the cursor.
     ReadFile,
     /// Search needle.
@@ -185,7 +188,42 @@ impl App {
                     self.should_quit = true;
                 }
             }
-            Action::Save => self.do_save(None),
+            Action::New => {
+                if self.doc.is_dirty() {
+                    self.message = "Unsaved changes; save or discard first".to_string();
+                } else {
+                    match open_optional(None) {
+                        Ok(doc) => {
+                            let created = Self::new(doc);
+                            *self = created;
+                        }
+                        Err(err) => self.message = format!("New failed: {err}"),
+                    }
+                }
+            }
+            Action::Open => {
+                if self.doc.is_dirty() {
+                    self.message = "Unsaved changes; save or discard first".to_string();
+                } else {
+                    self.mode = Mode::Prompt(PromptKind::OpenFile);
+                    self.prompt_label = "Open: ".to_string();
+                    self.prompt_buf.clear();
+                    self.message = "Enter a file to open".to_string();
+                }
+            }
+            Action::Save => {
+                if self.doc.path().is_none() {
+                    // Without a path there is nothing to write to; the
+                    // file name is the only missing input, so the save
+                    // folds into Save As the way graphical editors do.
+                    self.mode = Mode::Prompt(PromptKind::SaveAs);
+                    self.prompt_label = "Save As: ".to_string();
+                    self.prompt_buf = default_save_name(&self.doc);
+                    self.message = "Enter a file name for this document".to_string();
+                } else {
+                    self.do_save(None);
+                }
+            }
             Action::SaveAs => {
                 self.mode = Mode::Prompt(PromptKind::SaveAs);
                 self.prompt_label = "Save As: ".to_string();
@@ -435,6 +473,35 @@ impl App {
 pub fn open_optional(path: Option<&PathBuf>) -> Result<Document, DocumentError> {
     match path {
         Some(p) => crate::open(p),
+        // An untitled buffer in the default build is a word document:
+        // the suite's primary surface, and what the first Save As will
+        // name `untitled.odt` unless the user changes it.
+        #[cfg(feature = "docx")]
+        None => Ok(Document::Rich(Box::new(crate::RichDocument::new(
+            crate::RichFormat::Odt,
+        )))),
+        #[cfg(not(feature = "docx"))]
         None => Ok(Document::Text(TextDocument::new())),
+    }
+}
+
+/// File name suggested when a pathless document is saved for the first
+/// time; the extension decides which writer handles the file.
+fn default_save_name(doc: &Document) -> String {
+    match doc {
+        Document::Text(_) => "untitled.txt".to_string(),
+        #[cfg(feature = "docx")]
+        Document::Rich(r) => match r.format() {
+            crate::RichFormat::Docx => "untitled.docx".to_string(),
+            crate::RichFormat::Odt => "untitled.odt".to_string(),
+        },
+        #[cfg(feature = "xlsx")]
+        Document::Sheet(s) => match s.format() {
+            // A legacy workbook cannot be written back, so the save
+            // upgrades to the closest writable format.
+            crate::SheetFormat::Xls => "untitled.xlsx".to_string(),
+            crate::SheetFormat::Xlsx => "untitled.xlsx".to_string(),
+            crate::SheetFormat::Ods => "untitled.ods".to_string(),
+        },
     }
 }

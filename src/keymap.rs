@@ -16,6 +16,10 @@ use serde::Deserialize;
 pub enum Action {
     /// Exit; prompt first when the document is dirty.
     Exit,
+    /// Start a fresh untitled document.
+    New,
+    /// Prompt for a file to open, replacing the buffer.
+    Open,
     /// Write out to the current path.
     Save,
     /// Prompt for a destination path and save there.
@@ -155,6 +159,21 @@ impl Chord {
         }
         key.modifiers == self.mods
     }
+
+    /// Specificity of this chord for an event: 2 for a full agreement, 1
+    /// for the shift-tolerant printable agreement `matches` also accepts,
+    /// 0 for no match. Scoring lets `resolve` prefer `ctrl+shift+s` over
+    /// `ctrl+s` when SHIFT is actually held, and the reverse when it is
+    /// not, instead of whichever entry the map visits first.
+    fn match_score(&self, key: &KeyEvent) -> u8 {
+        if !self.matches(key) {
+            return 0;
+        }
+        if self.mods == key.modifiers {
+            return 2;
+        }
+        1
+    }
 }
 
 /// Default chord to action table implementing the Nano contract.
@@ -170,8 +189,10 @@ pub fn default_bindings() -> Vec<(Chord, Action)> {
     let n = KeyModifiers::NONE;
     vec![
         (Chord::new(K::Char('x'), m), Action::Exit),
-        (Chord::new(K::Char('o'), m), Action::Save),
+        (Chord::new(K::Char('o'), m), Action::Open),
+        (Chord::new(K::Char('n'), m), Action::New),
         (Chord::new(K::Char('s'), m), Action::Save),
+        (Chord::new(K::Char('s'), m | s), Action::SaveAs),
         (Chord::new(K::Char('r'), m), Action::ReadFile),
         (Chord::new(K::Char('w'), m), Action::Find),
         (Chord::new(K::Char('\\'), m), Action::Replace),
@@ -302,10 +323,19 @@ impl Keymap {
                     | KeyCode::Tab
             )
         {
+            let mut best: Option<(u8, Action)> = None;
             for (chord, action) in &self.map {
-                if chord.matches(key) {
-                    return action.clone();
+                // Two chords can both match one event when they differ only
+                // by SHIFT (`ctrl+s` versus `ctrl+shift+s`), while the map
+                // iteration order is arbitrary; the closest modifier match
+                // wins so resolution stays deterministic across instances.
+                let score = chord.match_score(key);
+                if score > 0 && best.as_ref().is_none_or(|(top, _)| score > *top) {
+                    best = Some((score, action.clone()));
                 }
+            }
+            if let Some((_, action)) = best {
+                return action;
             }
         }
         // Plain printable character falls through to insert.
@@ -380,6 +410,8 @@ pub fn format_chord(chord: &Chord) -> String {
 pub fn describe(action: &Action) -> String {
     match action {
         Action::Exit => "Exit (prompt if modified)".into(),
+        Action::New => "New document".into(),
+        Action::Open => "Open file".into(),
         Action::Save => "Save file".into(),
         Action::SaveAs => "Save as".into(),
         Action::ReadFile => "Insert file at cursor".into(),
@@ -413,6 +445,8 @@ fn action_from_name(name: &str) -> Option<Action> {
     use Action::*;
     Some(match name {
         "exit" => Exit,
+        "new" => New,
+        "open" => Open,
         "save" => Save,
         "save_as" => SaveAs,
         "read_file" => ReadFile,
@@ -455,5 +489,23 @@ mod tests {
     fn config_defaults_when_page_lines_absent() {
         let cfg: Config = toml::from_str("[keys]\nexit = \"ctrl+q\"").expect("valid config");
         assert_eq!(cfg.page_lines, None);
+    }
+
+    #[test]
+    fn shift_variants_resolve_to_the_closest_modifier_match() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        // The bindings live in a HashMap, so each fresh Keymap may visit
+        // its chords in a different order; resolving across many instances
+        // proves the closest modifier match wins regardless of order.
+        for _ in 0..50 {
+            let map = Keymap::new();
+            let save = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+            assert_eq!(map.resolve(&save), Action::Save);
+            let shifted = KeyEvent::new(
+                KeyCode::Char('S'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            );
+            assert_eq!(map.resolve(&shifted), Action::SaveAs);
+        }
     }
 }

@@ -157,12 +157,16 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
 
     // Place the terminal cursor on the caret when it is inside the viewport,
     // counting the rule rows the caret's page boundary has inserted above it.
+    // The pane's top hairline holds the first screen row, so document
+    // row `view_row` renders one row below it. Without the offset the
+    // terminal cursor sits on the line above the one being typed, and
+    // the final row would spill onto the status bar.
     let view_row = cursor_line - rowoff + layout.breaks_between(rowoff, cursor_line);
-    if view_row < height {
+    if view_row + 1 < height {
         let disp = cursor_col.saturating_sub(coloff);
         if disp < width {
             let x = area.x + disp as u16;
-            let y = area.y + view_row as u16;
+            let y = area.y + 1 + view_row as u16;
             frame.set_cursor_position((x, y));
         }
     }

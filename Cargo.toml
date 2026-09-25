@@ -40,9 +40,10 @@ ratatui-image = { version = "11.1.0", optional = true }
 printpdf = { version = "0.12.8", optional = true }
 
 [features]
-# Default stays empty until Phase 3 and Phase 4 land, so a clean
-# Phase 0 build does not compile the office backends.
-default = []
+# The installable suite is complete by default: an office suite that
+# cannot open its own formats without a build flag is not an office
+# suite. The image renderer stays opt-in until the Phase 6 work lands.
+default = ["docx", "xlsx", "proof", "pdf"]
 docx = ["dep:rdocx"]
 xlsx = [
     "dep:calamine",
@@ -53,7 +54,6 @@ xlsx = [
 proof = ["dep:zspell"]
 image = ["dep:ratatui-image"]
 pdf = ["dep:printpdf"]
-# Target default once backends exist: ["docx", "xlsx", "proof"]
 full = ["docx", "xlsx", "proof", "image", "pdf"]
 
 [dev-dependencies]

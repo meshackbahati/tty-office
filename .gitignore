@@ -32,3 +32,6 @@ docs/ARCHITECTURE.md
 # Added by cargo
 
 /target
+
+# Project-local scratch: tests and tools use .tmp, never /tmp
+.tmp/
