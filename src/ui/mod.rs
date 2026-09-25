@@ -7,6 +7,7 @@
 //! using the same [`crate::page::PageLayout`] the PDF exporter chunks on.
 
 mod status;
+mod tabs;
 
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -46,22 +47,38 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     if area.height < 3 {
         return;
     }
-    let chunks = Layout::vertical([
+    // The tab strip takes a row of its own only once a second tab
+    // exists; a single document keeps the full height for text.
+    let show_tabs = app.tab_count() > 1;
+    if show_tabs && area.height < 4 {
+        return;
+    }
+    let mut constraints = Vec::new();
+    if show_tabs {
+        constraints.push(Constraint::Length(1));
+    }
+    constraints.extend([
         Constraint::Min(1),
         Constraint::Length(1),
         Constraint::Length(1),
-    ])
-    .split(area);
+    ]);
+    let chunks = Layout::vertical(constraints).split(area);
+    let (text, status, message) = if show_tabs {
+        tabs::draw_tab_bar(frame, app, chunks[0]);
+        (chunks[1], chunks[2], chunks[3])
+    } else {
+        (chunks[0], chunks[1], chunks[2])
+    };
 
-    let (text_h, text_w) = (chunks[0].height as usize, chunks[0].width as usize);
+    let (text_h, text_w) = (text.height as usize, text.width as usize);
     app.set_viewport(text_h, text_w);
 
-    draw_text(frame, app, chunks[0]);
-    status::draw_status(frame, app, chunks[1]);
-    draw_message(frame, app, chunks[2]);
+    draw_text(frame, app, text);
+    status::draw_status(frame, app, status);
+    draw_message(frame, app, message);
 
     if app.mode == Mode::Help {
-        draw_help(frame, app, chunks[0]);
+        draw_help(frame, app, text);
     }
 }
 

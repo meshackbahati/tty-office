@@ -4,11 +4,16 @@
 //! into document edits or mode changes. It never talks to the terminal
 //! directly, which keeps the event loop and the tests separable.
 
+mod open;
 mod prompts;
 #[cfg(feature = "xlsx")]
 mod sheet_keys;
+pub(crate) mod tabs;
 
-use std::path::{Path, PathBuf};
+use open::default_save_name;
+pub use open::open_optional;
+
+use std::path::Path;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -16,8 +21,6 @@ use crate::editor::{Editor, Motion};
 use crate::error::DocumentError;
 use crate::keymap::{Action, Keymap};
 use crate::page::PageLayout;
-#[cfg(not(feature = "docx"))]
-use crate::text::TextDocument;
 use crate::Document;
 
 /// UI mode driving how key events are interpreted.
@@ -61,8 +64,13 @@ pub enum PromptKind {
 
 /// Application state driven by the event loop.
 pub struct App {
-    /// Open document.
+    /// Active document; inactive tabs live in `background`.
     pub doc: Document,
+    /// Inactive tabs in display order, with the active document held
+    /// separately in `doc` at logical index `active`.
+    background: Vec<Document>,
+    /// Display index of the active document among all tabs.
+    active: usize,
     /// Resolved key bindings.
     pub keymap: Keymap,
     /// Transient status line content.
@@ -105,6 +113,8 @@ impl App {
     pub fn new(doc: Document) -> Self {
         Self {
             doc,
+            background: Vec::new(),
+            active: 0,
             keymap: Keymap::load_user(),
             message: String::new(),
             should_quit: false,
@@ -166,6 +176,17 @@ impl App {
     }
 
     fn handle_normal(&mut self, key: KeyEvent) {
+        // Alt+digit jumps straight to a tab; digits carry no other
+        // binding, so they never reach the keymap.
+        if key.modifiers == KeyModifiers::ALT {
+            if let KeyCode::Char(c @ '1'..='9') = key.code {
+                let n = (c as usize) - ('0' as usize);
+                if n <= self.tab_count() {
+                    self.switch_tab(n - 1);
+                }
+                return;
+            }
+        }
         let action = self.keymap.resolve(&key);
         #[cfg(feature = "xlsx")]
         if self.is_sheet() && self.handle_sheet_normal(action.clone(), key) {
@@ -179,7 +200,7 @@ impl App {
             Action::Move(m) => self.apply_motion(m, false),
             Action::Extend(m) => self.apply_motion(m, true),
             Action::Exit => {
-                if self.doc.is_dirty() {
+                if self.any_dirty() {
                     self.mode = Mode::ConfirmQuit;
                     self.message =
                         "Unsaved changes. Ctrl+S save, Ctrl+X discard, any other key cancels"
@@ -189,28 +210,26 @@ impl App {
                 }
             }
             Action::New => {
-                if self.doc.is_dirty() {
-                    self.message = "Unsaved changes; save or discard first".to_string();
-                } else {
-                    match open_optional(None) {
-                        Ok(doc) => {
-                            let created = Self::new(doc);
-                            *self = created;
-                        }
-                        Err(err) => self.message = format!("New failed: {err}"),
+                // New buffers open beside the current one, so no dirty
+                // guard is needed: nothing is ever replaced.
+                match open_optional(None) {
+                    Ok(doc) => {
+                        self.new_tab(doc);
+                        let name = self.doc.display_name();
+                        self.message = format!("New {name}");
                     }
+                    Err(err) => self.message = format!("New failed: {err}"),
                 }
             }
             Action::Open => {
-                if self.doc.is_dirty() {
-                    self.message = "Unsaved changes; save or discard first".to_string();
-                } else {
-                    self.mode = Mode::Prompt(PromptKind::OpenFile);
-                    self.prompt_label = "Open: ".to_string();
-                    self.prompt_buf.clear();
-                    self.message = "Enter a file to open".to_string();
-                }
+                self.mode = Mode::Prompt(PromptKind::OpenFile);
+                self.prompt_label = "Open: ".to_string();
+                self.prompt_buf.clear();
+                self.message = "Enter a file to open in a new tab".to_string();
             }
+            Action::NextTab => self.next_tab(),
+            Action::PrevTab => self.prev_tab(),
+            Action::CloseTab => self.close_tab(),
             Action::Save => {
                 if self.doc.path().is_none() {
                     // Without a path there is nothing to write to; the
@@ -287,10 +306,13 @@ impl App {
                 if key.modifiers.contains(KeyModifiers::CONTROL) =>
             {
                 self.do_save(None);
-                if !self.doc.is_dirty() {
+                // Quitting needs every tab clean, not just the visible
+                // one, or background edits would be lost silently.
+                if !self.any_dirty() {
                     self.should_quit = true;
                 } else {
                     self.mode = Mode::Normal;
+                    self.message = "Other tabs still have unsaved changes".to_string();
                 }
             }
             KeyCode::Char('x') | KeyCode::Char('X')
@@ -466,42 +488,5 @@ impl App {
     #[cfg(feature = "proof")]
     pub fn misspelling_count(&self) -> usize {
         self.misspelled_ranges().len()
-    }
-}
-
-/// Open `path`, or an empty document when no path is given.
-pub fn open_optional(path: Option<&PathBuf>) -> Result<Document, DocumentError> {
-    match path {
-        Some(p) => crate::open(p),
-        // An untitled buffer in the default build is a word document:
-        // the suite's primary surface, and what the first Save As will
-        // name `untitled.odt` unless the user changes it.
-        #[cfg(feature = "docx")]
-        None => Ok(Document::Rich(Box::new(crate::RichDocument::new(
-            crate::RichFormat::Odt,
-        )))),
-        #[cfg(not(feature = "docx"))]
-        None => Ok(Document::Text(TextDocument::new())),
-    }
-}
-
-/// File name suggested when a pathless document is saved for the first
-/// time; the extension decides which writer handles the file.
-fn default_save_name(doc: &Document) -> String {
-    match doc {
-        Document::Text(_) => "untitled.txt".to_string(),
-        #[cfg(feature = "docx")]
-        Document::Rich(r) => match r.format() {
-            crate::RichFormat::Docx => "untitled.docx".to_string(),
-            crate::RichFormat::Odt => "untitled.odt".to_string(),
-        },
-        #[cfg(feature = "xlsx")]
-        Document::Sheet(s) => match s.format() {
-            // A legacy workbook cannot be written back, so the save
-            // upgrades to the closest writable format.
-            crate::SheetFormat::Xls => "untitled.xlsx".to_string(),
-            crate::SheetFormat::Xlsx => "untitled.xlsx".to_string(),
-            crate::SheetFormat::Ods => "untitled.ods".to_string(),
-        },
     }
 }

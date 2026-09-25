@@ -11,6 +11,9 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::Deserialize;
 
+mod bindings;
+use bindings::default_bindings;
+
 /// Semantic action bound to one or more chords.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Action {
@@ -18,8 +21,14 @@ pub enum Action {
     Exit,
     /// Start a fresh untitled document.
     New,
-    /// Prompt for a file to open, replacing the buffer.
+    /// Prompt for a file to open in a new tab.
     Open,
+    /// Activate the next tab, wrapping past the last one.
+    NextTab,
+    /// Activate the previous tab, wrapping past the first one.
+    PrevTab,
+    /// Close the active tab; dirty tabs refuse, the last tab quits.
+    CloseTab,
     /// Write out to the current path.
     Save,
     /// Prompt for a destination path and save there.
@@ -174,61 +183,6 @@ impl Chord {
         }
         1
     }
-}
-
-/// Default chord to action table implementing the Nano contract.
-///
-/// Prompt-local chords (`Confirm`, `Cancel`, `PromptBackspace`) are handled by
-/// the application layer rather than this table, so they are not bound here.
-pub fn default_bindings() -> Vec<(Chord, Action)> {
-    use crate::editor::Motion;
-    use KeyCode as K;
-    let m = KeyModifiers::CONTROL;
-    let a = KeyModifiers::ALT;
-    let s = KeyModifiers::SHIFT;
-    let n = KeyModifiers::NONE;
-    vec![
-        (Chord::new(K::Char('x'), m), Action::Exit),
-        (Chord::new(K::Char('o'), m), Action::Open),
-        (Chord::new(K::Char('n'), m), Action::New),
-        (Chord::new(K::Char('s'), m), Action::Save),
-        (Chord::new(K::Char('s'), m | s), Action::SaveAs),
-        (Chord::new(K::Char('r'), m), Action::ReadFile),
-        (Chord::new(K::Char('w'), m), Action::Find),
-        (Chord::new(K::Char('\\'), m), Action::Replace),
-        (Chord::new(K::Char('f'), m), Action::Find),
-        (Chord::new(K::Char('k'), m), Action::CutLine),
-        (Chord::new(K::Char('u'), m), Action::Uncut),
-        (Chord::new(K::Char('c'), m), Action::ShowPosition),
-        (Chord::new(K::Char('g'), m), Action::Help),
-        (Chord::new(K::Char('z'), m), Action::Undo),
-        (Chord::new(K::Char('y'), m), Action::Redo),
-        (Chord::new(K::Char('a'), m), Action::SelectAll),
-        (Chord::new(K::Char('b'), a), Action::ToggleBold),
-        (Chord::new(K::Char('i'), a), Action::ToggleItalic),
-        (Chord::new(K::Char('p'), m), Action::Export),
-        (Chord::new(K::F(1), n), Action::Help),
-        (Chord::new(K::Enter, n), Action::InsertNewline),
-        (Chord::new(K::Tab, n), Action::Insert('\t')),
-        (Chord::new(K::Backspace, n), Action::Backspace),
-        (Chord::new(K::Delete, n), Action::DeleteForward),
-        (Chord::new(K::Left, n), Action::Move(Motion::Left)),
-        (Chord::new(K::Right, n), Action::Move(Motion::Right)),
-        (Chord::new(K::Up, n), Action::Move(Motion::Up)),
-        (Chord::new(K::Down, n), Action::Move(Motion::Down)),
-        (Chord::new(K::Home, n), Action::Move(Motion::LineStart)),
-        (Chord::new(K::End, n), Action::Move(Motion::LineEnd)),
-        (Chord::new(K::PageUp, n), Action::Move(Motion::PageUp)),
-        (Chord::new(K::PageDown, n), Action::Move(Motion::PageDown)),
-        (Chord::new(K::Left, s), Action::Extend(Motion::Left)),
-        (Chord::new(K::Right, s), Action::Extend(Motion::Right)),
-        (Chord::new(K::Up, s), Action::Extend(Motion::Up)),
-        (Chord::new(K::Down, s), Action::Extend(Motion::Down)),
-        (Chord::new(K::Home, s), Action::Extend(Motion::LineStart)),
-        (Chord::new(K::End, s), Action::Extend(Motion::LineEnd)),
-        (Chord::new(K::Home, m), Action::Move(Motion::BufferStart)),
-        (Chord::new(K::End, m), Action::Move(Motion::BufferEnd)),
-    ]
 }
 
 /// File format for user config overrides.
@@ -412,6 +366,9 @@ pub fn describe(action: &Action) -> String {
         Action::Exit => "Exit (prompt if modified)".into(),
         Action::New => "New document".into(),
         Action::Open => "Open file".into(),
+        Action::NextTab => "Next tab".into(),
+        Action::PrevTab => "Previous tab".into(),
+        Action::CloseTab => "Close tab".into(),
         Action::Save => "Save file".into(),
         Action::SaveAs => "Save as".into(),
         Action::ReadFile => "Insert file at cursor".into(),
@@ -447,6 +404,9 @@ fn action_from_name(name: &str) -> Option<Action> {
         "exit" => Exit,
         "new" => New,
         "open" => Open,
+        "tab_next" => NextTab,
+        "tab_prev" => PrevTab,
+        "close_tab" => CloseTab,
         "save" => Save,
         "save_as" => SaveAs,
         "read_file" => ReadFile,
@@ -489,23 +449,5 @@ mod tests {
     fn config_defaults_when_page_lines_absent() {
         let cfg: Config = toml::from_str("[keys]\nexit = \"ctrl+q\"").expect("valid config");
         assert_eq!(cfg.page_lines, None);
-    }
-
-    #[test]
-    fn shift_variants_resolve_to_the_closest_modifier_match() {
-        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-        // The bindings live in a HashMap, so each fresh Keymap may visit
-        // its chords in a different order; resolving across many instances
-        // proves the closest modifier match wins regardless of order.
-        for _ in 0..50 {
-            let map = Keymap::new();
-            let save = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
-            assert_eq!(map.resolve(&save), Action::Save);
-            let shifted = KeyEvent::new(
-                KeyCode::Char('S'),
-                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-            );
-            assert_eq!(map.resolve(&shifted), Action::SaveAs);
-        }
     }
 }

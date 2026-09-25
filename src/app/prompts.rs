@@ -67,8 +67,7 @@ impl App {
                 }
                 match crate::open(Path::new(&value)) {
                     Ok(doc) => {
-                        let created = Self::new(doc);
-                        *self = created;
+                        self.new_tab(doc);
                         let name = self.doc.display_name();
                         self.message = format!("Opened {name}");
                     }
