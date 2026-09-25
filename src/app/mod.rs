@@ -51,6 +51,9 @@ pub enum PromptKind {
     CellEdit,
     /// Path prompt for export; format follows the extension.
     Export,
+    /// Confirmation stop after a replace preview; Enter applies the staged
+    /// matches and Esc discards them. Not a text field.
+    ReplaceConfirm,
 }
 
 /// Application state driven by the event loop.
@@ -89,6 +92,9 @@ pub struct App {
     /// Page geometry for prose documents, from `page_lines` in the user
     /// config or the shared default when the key is absent.
     page_layout: PageLayout,
+    /// Match spans staged by the replace preview, applied only when the
+    /// confirmation prompt is accepted and cleared on any cancel path.
+    pending_replace: Vec<(usize, usize)>,
 }
 
 impl App {
@@ -116,6 +122,7 @@ impl App {
                     .page_lines
                     .unwrap_or(PageLayout::DEFAULT_LINES),
             ),
+            pending_replace: Vec::new(),
         }
     }
 

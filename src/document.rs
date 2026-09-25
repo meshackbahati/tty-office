@@ -273,7 +273,7 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
         #[cfg(feature = "xlsx")]
         "xlsx" | "ods" | "xls" => {
             let format = crate::sheet::SheetFormat::from_path(path)
-                .expect("xlsx/ods/xls extension maps to a SheetFormat");
+                .ok_or_else(|| DocumentError::UnsupportedFormat(ext.clone()))?;
             if path.exists() {
                 Ok(Document::Sheet(Box::new(SheetDocument::open(path)?)))
             } else {

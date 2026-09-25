@@ -13,10 +13,27 @@ use super::{App, Mode, PromptKind};
 
 impl App {
     pub(crate) fn handle_prompt(&mut self, kind: PromptKind, key: KeyEvent) {
+        // The replace preview is a confirmation stop rather than a text
+        // field: only Enter and Esc act, so the staged spans and the shown
+        // summary cannot drift apart by editing the prompt buffer.
+        if kind == PromptKind::ReplaceConfirm {
+            match key.code {
+                KeyCode::Enter => self.commit_replace(),
+                KeyCode::Esc => {
+                    self.pending_replace.clear();
+                    self.mode = Mode::Normal;
+                    self.prompt_buf.clear();
+                    self.message = "Replace cancelled".to_string();
+                }
+                _ => {}
+            }
+            return;
+        }
         match key.code {
             KeyCode::Esc => {
                 self.mode = Mode::Normal;
                 self.prompt_buf.clear();
+                self.pending_replace.clear();
                 self.message.clear();
             }
             KeyCode::Enter => {
@@ -77,7 +94,7 @@ impl App {
             }
             PromptKind::ReplaceText => {
                 self.replace_with = value;
-                self.replace_all();
+                self.preview_replace();
             }
             #[cfg(feature = "xlsx")]
             PromptKind::CellEdit => {
@@ -100,6 +117,9 @@ impl App {
                     Err(err) => self.message = format!("Export failed: {err}"),
                 }
             }
+            // The confirmation stop is answered inside `handle_prompt` before
+            // completion runs, so nothing reaches this arm.
+            PromptKind::ReplaceConfirm => {}
         }
     }
 
@@ -119,7 +139,10 @@ impl App {
         }
     }
 
-    pub(crate) fn replace_all(&mut self) {
+    /// Collect matches without touching the document and stage them behind a
+    /// confirmation prompt, so the scale of the change is visible before any
+    /// character moves.
+    pub(crate) fn preview_replace(&mut self) {
         let needle = self.last_find.clone();
         let replacement = self.replace_with.clone();
         if needle.is_empty() {
@@ -138,7 +161,31 @@ impl App {
             spans.push((a, b));
             cursor = b.max(a + 1);
         }
+        if spans.is_empty() {
+            self.message = format!("No matches for '{needle}'");
+            return;
+        }
+        self.pending_replace = spans;
+        self.mode = Mode::Prompt(PromptKind::ReplaceConfirm);
+        self.prompt_label = "Replace preview: ".to_string();
+        self.prompt_buf = format!(
+            "{} occurrence(s): '{needle}' -> '{replacement}'",
+            self.pending_replace.len()
+        );
+        self.message = "Enter to apply, Esc to cancel".to_string();
+    }
+
+    /// Apply the spans staged by the preview when the user confirms.
+    pub(crate) fn commit_replace(&mut self) {
+        let spans = std::mem::take(&mut self.pending_replace);
+        let replacement = self.replace_with.clone();
         let count = spans.len();
+        self.mode = Mode::Normal;
+        self.prompt_buf.clear();
+        let Some(surface) = self.doc.prose_surface() else {
+            self.message = "Replace is unavailable for this document type".to_string();
+            return;
+        };
         // Replace from the end so earlier character indices stay valid.
         for (a, b) in spans.into_iter().rev() {
             surface.replace_range(a, b, &replacement);

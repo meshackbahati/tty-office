@@ -127,12 +127,13 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             lines.push(Line::from(""));
             continue;
         }
-        let (raw, line_start) = {
-            let surface = app
-                .doc
-                .prose_surface()
-                .expect("prose surface checked above");
-            (surface.line_text(cur), surface.line_char_start(cur))
+        let Some((raw, line_start)) = (|| {
+            let surface = app.doc.prose_surface()?;
+            Some((surface.line_text(cur), surface.line_char_start(cur)))
+        })() else {
+            // The prose surface was checked before the loop; if it disappears
+            // mid-frame the pane simply stops drawing rather than panicking.
+            break;
         };
         lines.push(render_line(
             &raw,

@@ -118,8 +118,38 @@ fn ctrl_backslash_replace_all() {
         app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    // The preview stages the matches and asks for confirmation before any
+    // character moves.
+    assert_eq!(app.mode, Mode::Prompt(PromptKind::ReplaceConfirm));
+    assert_eq!(app.message, "Enter to apply, Esc to cancel");
+    assert!(app.prompt_buf.starts_with("2 occurrence(s)"));
+    assert_eq!(app.doc.text_projection(), "foo bar foo");
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.doc.text_projection(), "qux bar qux");
     assert_eq!(app.message, "Replaced 2 occurrence(s)");
+}
+
+#[test]
+fn replace_preview_esc_cancels_without_changes() {
+    let mut app = plain_app();
+    app.doc.insert_str("foo bar foo");
+    app.handle_key(ctrl('\\'));
+    for c in "foo".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    for c in "qux".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.mode, Mode::Prompt(PromptKind::ReplaceConfirm));
+    // Typing during the preview is ignored so the summary stays truthful.
+    app.handle_key(key(KeyCode::Char('z'), KeyModifiers::NONE));
+    assert!(app.prompt_buf.starts_with("2 occurrence(s)"));
+    app.handle_key(key(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(app.mode, Mode::Normal);
+    assert_eq!(app.doc.text_projection(), "foo bar foo");
+    assert_eq!(app.message, "Replace cancelled");
 }
 
 #[test]
