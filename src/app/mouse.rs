@@ -152,8 +152,9 @@ impl App {
     }
 
     /// Document line shown at `r` display rows below the pane hairline,
-    /// counting the page-rule rows the draw loop inserts. Clicks on a
-    /// rule row snap to the line below it.
+    /// counting the page-rule rows the draw loop inserts and the blank
+    /// rows the zoom level adds after every text line. Clicks on a rule
+    /// row snap to the line below it.
     fn display_row_to_line(&mut self, r: usize) -> Option<usize> {
         let surface = self.doc.prose_surface()?;
         let (rowoff, line_count) = (surface.rowoff(), surface.line_count());
@@ -161,6 +162,7 @@ impl App {
             return None;
         }
         let layout = self.page_layout();
+        let step = 1 + self.zoom_step();
         let mut cur = rowoff;
         let mut rule_drawn = false;
         let mut i = 0usize;
@@ -173,7 +175,7 @@ impl App {
                 i += 1;
                 continue;
             }
-            if i == r {
+            if r < i + step {
                 return Some(cur.min(line_count - 1));
             }
             if cur + 1 >= line_count {
@@ -181,7 +183,7 @@ impl App {
             }
             cur += 1;
             rule_drawn = false;
-            i += 1;
+            i += step;
         }
     }
 

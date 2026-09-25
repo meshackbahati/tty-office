@@ -157,8 +157,11 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     // pull the window down until the caret and its rules fit. The stored
     // scroll offset is left untouched: scrolling stays measured in text lines
     // and each frame derives the same display position deterministically.
+    // Zoom levels add blank rows after every text line, so each line
+    // occupies `step` display rows and the caret math counts them.
+    let step = 1 + app.zoom_step();
     while rowoff < cursor_line
-        && cursor_line - rowoff + layout.breaks_between(rowoff, cursor_line) >= height
+        && (cursor_line - rowoff) * step + layout.breaks_between(rowoff, cursor_line) >= height
     {
         rowoff += 1;
     }
@@ -168,7 +171,7 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     // Whether the rule above `cur` has already been pushed for this line;
     // without it the same boundary would repaint on every remaining row.
     let mut rule_drawn = false;
-    for _row in 0..height {
+    while lines.len() < height {
         if !rule_drawn && cur < line_count && cur > rowoff && layout.is_page_start(cur) {
             lines.push(page_rule(&layout, cur, width));
             rule_drawn = true;
@@ -195,6 +198,12 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             cur == cursor_line,
             cursor_col,
         ));
+        for _ in 1..step {
+            if lines.len() >= height {
+                break;
+            }
+            lines.push(Line::from(""));
+        }
         cur += 1;
         rule_drawn = false;
     }
@@ -207,12 +216,13 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(paragraph, area);
 
     // Place the terminal cursor on the caret when it is inside the viewport,
-    // counting the rule rows the caret's page boundary has inserted above it.
+    // counting the rule rows the caret's page boundary has inserted above it
+    // plus the blank rows the zoom level adds after every text line.
     // The pane's top hairline holds the first screen row, so document
     // row `view_row` renders one row below it. Without the offset the
     // terminal cursor sits on the line above the one being typed, and
     // the final row would spill onto the status bar.
-    let view_row = cursor_line - rowoff + layout.breaks_between(rowoff, cursor_line);
+    let view_row = (cursor_line - rowoff) * step + layout.breaks_between(rowoff, cursor_line);
     if view_row + 1 < height {
         let disp = cursor_col.saturating_sub(coloff);
         if disp < width {

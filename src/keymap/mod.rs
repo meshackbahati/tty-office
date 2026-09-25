@@ -35,6 +35,12 @@ pub enum Action {
     CloseTab,
     /// Show or hide the sidebar.
     ToggleSidebar,
+    /// Add one blank row per text line, up to the maximum.
+    ZoomIn,
+    /// Remove one blank row per text line, down to none.
+    ZoomOut,
+    /// Return to one row per text line.
+    ZoomReset,
     /// Write out to the current path.
     Save,
     /// Prompt for a destination path and save there.
@@ -378,6 +384,9 @@ pub fn describe(action: &Action) -> String {
         Action::PrevTab => "Previous tab".into(),
         Action::CloseTab => "Close tab".into(),
         Action::ToggleSidebar => "Toggle sidebar".into(),
+        Action::ZoomIn => "Zoom in".into(),
+        Action::ZoomOut => "Zoom out".into(),
+        Action::ZoomReset => "Reset zoom".into(),
         Action::Save => "Save file".into(),
         Action::SaveAs => "Save as".into(),
         Action::ReadFile => "Insert file at cursor".into(),
@@ -419,6 +428,9 @@ fn action_from_name(name: &str) -> Option<Action> {
         "tab_prev" => PrevTab,
         "close_tab" => CloseTab,
         "toggle_sidebar" => ToggleSidebar,
+        "zoom_in" => ZoomIn,
+        "zoom_out" => ZoomOut,
+        "zoom_reset" => ZoomReset,
         "save" => Save,
         "save_as" => SaveAs,
         "read_file" => ReadFile,

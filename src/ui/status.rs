@@ -72,6 +72,10 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             Span::raw(" │ "),
             Span::raw(format!("page {page}/{pages}")),
         ];
+        if app.zoom_step() > 0 {
+            spans.push(Span::raw(" │ "));
+            spans.push(Span::raw(format!("{}%", app.zoom_percent())));
+        }
         #[cfg(feature = "proof")]
         {
             let n = app.misspelling_count();

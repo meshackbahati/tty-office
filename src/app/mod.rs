@@ -80,6 +80,9 @@ pub(crate) struct ViewRects {
     pub tab_y: Option<u16>,
 }
 
+/// Highest zoom level; each level adds one blank row per text line.
+pub(crate) const MAX_ZOOM: u8 = 4;
+
 /// Application state driven by the event loop.
 pub struct App {
     /// Active document; inactive tabs live in `background`.
@@ -99,6 +102,8 @@ pub struct App {
     pub(crate) view: ViewRects,
     /// Drag origin for mouse selection, cleared on release.
     drag: Option<mouse::DragOrigin>,
+    /// Display zoom: extra blank rows per text line, up to MAX_ZOOM.
+    zoom: u8,
     /// Resolved key bindings.
     pub keymap: Keymap,
     /// Transient status line content.
@@ -148,6 +153,7 @@ impl App {
             sidebar: true,
             view: ViewRects::default(),
             drag: None,
+            zoom: 0,
             keymap: Keymap::load_user(),
             message: String::new(),
             should_quit: false,
@@ -175,6 +181,16 @@ impl App {
     /// Page geometry the viewport and the status bar render with.
     pub fn page_layout(&self) -> PageLayout {
         self.page_layout
+    }
+
+    /// Extra blank rows drawn per text line; zero is the 100% level.
+    pub(crate) fn zoom_step(&self) -> usize {
+        self.zoom as usize
+    }
+
+    /// Zoom as a percentage for the status bar: 100 plus 25 per level.
+    pub fn zoom_percent(&self) -> u16 {
+        100 + self.zoom as u16 * 25
     }
 
     /// Update viewport metrics reported by the UI after each frame.

@@ -86,6 +86,15 @@ impl App {
             Action::ToggleSidebar => {
                 self.sidebar = !self.sidebar;
             }
+            Action::ZoomIn => {
+                self.zoom = self.zoom.saturating_add(1).min(super::MAX_ZOOM);
+            }
+            Action::ZoomOut => {
+                self.zoom = self.zoom.saturating_sub(1);
+            }
+            Action::ZoomReset => {
+                self.zoom = 0;
+            }
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
                 let name = self.doc.display_name();

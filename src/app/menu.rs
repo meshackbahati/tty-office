@@ -106,11 +106,26 @@ static EDIT_ITEMS: [MenuItem; 7] = [
     },
 ];
 
-static VIEW_ITEMS: [MenuItem; 2] = [
+static VIEW_ITEMS: [MenuItem; 5] = [
     MenuItem {
         label: "Show position",
         action: Action::ShowPosition,
         shortcut: "Ctrl+C",
+    },
+    MenuItem {
+        label: "Zoom in",
+        action: Action::ZoomIn,
+        shortcut: "Ctrl+=",
+    },
+    MenuItem {
+        label: "Zoom out",
+        action: Action::ZoomOut,
+        shortcut: "Ctrl+-",
+    },
+    MenuItem {
+        label: "Reset zoom",
+        action: Action::ZoomReset,
+        shortcut: "Ctrl+0",
     },
     MenuItem {
         label: "Keyboard shortcuts",
