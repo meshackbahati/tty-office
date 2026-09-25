@@ -6,6 +6,7 @@
 //! pane marks page boundaries with a hairline rule carrying the page number,
 //! using the same [`crate::page::PageLayout`] the PDF exporter chunks on.
 
+mod menu;
 mod status;
 mod tabs;
 
@@ -44,16 +45,17 @@ struct LineDecor<'a> {
 /// Draw one frame.
 pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     let area = frame.area();
-    if area.height < 3 {
+    if area.height < 4 {
         return;
     }
-    // The tab strip takes a row of its own only once a second tab
-    // exists; a single document keeps the full height for text.
+    // The menu bar always takes the first row; the tab strip takes a row
+    // of its own only once a second tab exists, and a single document
+    // keeps that height for text.
     let show_tabs = app.tab_count() > 1;
-    if show_tabs && area.height < 4 {
+    if show_tabs && area.height < 5 {
         return;
     }
-    let mut constraints = Vec::new();
+    let mut constraints = vec![Constraint::Length(1)];
     if show_tabs {
         constraints.push(Constraint::Length(1));
     }
@@ -63,12 +65,16 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
         Constraint::Length(1),
     ]);
     let chunks = Layout::vertical(constraints).split(area);
+    // Row 0 is the menu bar; the text pane starts below it and any tab row.
+    let base = 1;
     let (text, status, message) = if show_tabs {
-        tabs::draw_tab_bar(frame, app, chunks[0]);
-        (chunks[1], chunks[2], chunks[3])
+        tabs::draw_tab_bar(frame, app, chunks[base]);
+        (chunks[base + 1], chunks[base + 2], chunks[base + 3])
     } else {
-        (chunks[0], chunks[1], chunks[2])
+        (chunks[base], chunks[base + 1], chunks[base + 2])
     };
+
+    menu::draw_menu_bar(frame, app, chunks[0]);
 
     let (text_h, text_w) = (text.height as usize, text.width as usize);
     app.set_viewport(text_h, text_w);
@@ -76,6 +82,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     draw_text(frame, app, text);
     status::draw_status(frame, app, status);
     draw_message(frame, app, message);
+    menu::draw_dropdown(frame, app);
 
     if app.mode == Mode::Help {
         draw_help(frame, app, text);

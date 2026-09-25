@@ -72,8 +72,9 @@ fn selection_is_marked_in_rendered_line() {
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     let buffer = term.backend().buffer();
     let area = *buffer.area();
-    // Row 1 is inside the text pane under the top border.
-    let cell = &buffer[(area.left(), area.top() + 1)];
+    // Row 2 is the first text row: row 0 holds the menu bar and row 1 the
+    // pane hairline.
+    let cell = &buffer[(area.left(), area.top() + 2)];
     // Reverse video is applied via style; assert the glyph itself still paints.
     assert_eq!(cell.symbol(), "s");
 }
@@ -138,18 +139,19 @@ fn find_highlight_marks_the_current_match() {
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     let text = buffer_text(&mut term);
     assert!(text.contains("alpha beta alpha"), "body changed: {text}");
-    // The text pane draws a one-row hairline on top, so the first document
-    // line sits at row 1. "beta" occupies columns 6..10 of that line.
+    // Row 0 holds the menu bar and the text pane draws a one-row hairline
+    // on top, so the first document line sits at row 2. "beta" occupies
+    // columns 6..10 of that line.
     for x in 6..10u16 {
         let buffer = term.backend().buffer();
-        let style = buffer[(x, 1)].style();
+        let style = buffer[(x, 2)].style();
         assert!(
             style.add_modifier.contains(Modifier::REVERSED),
             "column {x} of the match is not highlighted: {text}"
         );
     }
     let buffer = term.backend().buffer();
-    let outside_style = buffer[(0, 1)].style();
+    let outside_style = buffer[(0, 2)].style();
     assert!(
         !outside_style.add_modifier.contains(Modifier::REVERSED),
         "text outside the match is highlighted: {text}"
@@ -194,9 +196,10 @@ fn cursor_sits_on_the_first_text_row_below_the_top_hairline() {
     let backend = TestBackend::new(30, 8);
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
-    // Row 0 holds the hairline that closes the top of the text pane, so the
-    // caret must be placed on row 1, which holds the first document line.
-    // The caret sits after the inserted "hello", hence column 5; the row is
-    // the regression target, since the old code drew it onto the hairline.
-    term.backend_mut().assert_cursor_position((5, 1));
+    // Row 0 holds the menu bar and row 1 the hairline that closes the top
+    // of the text pane, so the caret must be placed on row 2, which holds
+    // the first document line. The caret sits after the inserted "hello",
+    // hence column 5; the row is the regression target, since the old code
+    // drew it onto the hairline.
+    term.backend_mut().assert_cursor_position((5, 2));
 }
