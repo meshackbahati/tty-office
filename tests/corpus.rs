@@ -3,10 +3,9 @@
 //! Every fixture prints a per-file `pass:` or `fail:` line so a run records
 //! which files cleared the round trip; the first failure panics with the
 //! fixture named. Regenerate the corpus with
-//! `cargo run --example make_fixtures --features docx,xlsx` when the editor
-//! surface gains new content types.
-
-#![cfg(any(feature = "docx", feature = "xlsx"))]
+//! `cargo run --example make_fixtures` when the editor surface gains new
+//! content types. The text fixtures run on every build; rich and sheet
+//! fixtures need their backend features.
 
 use std::path::PathBuf;
 
@@ -127,5 +126,48 @@ mod sheets {
     #[test]
     fn ods_corpus_roundtrip() {
         roundtrip("sales.ods");
+    }
+}
+
+/// Plain text fixtures need no backend feature: they pin the text surface
+/// every build owns, including `--no-default-features`.
+mod text {
+    use super::*;
+    use tty_office::{open, Editor};
+
+    fn roundtrip(name: &str, body: &str) {
+        let src = fixture_path(name);
+        let mut doc = open(&src).expect("open fixture");
+        assert_eq!(
+            doc.text_projection(),
+            body,
+            "projection mismatch on first open of {name}"
+        );
+        assert!(!doc.is_dirty(), "opening {name} must not dirty it");
+
+        let dir = TempDir::new().expect("temp dir");
+        let out = dir.path().join(name);
+        doc.save(Some(&out)).expect("save copy");
+        let again = open(&out).expect("reopen saved copy");
+        assert_eq!(
+            again.text_projection(),
+            body,
+            "projection drift after round trip of {name}"
+        );
+        assert!(!again.is_dirty(), "reopening {name} must not dirty it");
+        println!("pass: {name}");
+    }
+
+    #[test]
+    fn txt_corpus_roundtrip() {
+        roundtrip(
+            "plain.txt",
+            "Plain notes\nA second line for the corpus.\n\nTrailing paragraph.",
+        );
+    }
+
+    #[test]
+    fn md_corpus_roundtrip() {
+        roundtrip("notes.md", "# Notes\n\n- first\n- second\n\nDone.");
     }
 }

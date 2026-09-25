@@ -26,6 +26,23 @@ fn main() -> anyhow::Result<()> {
         doc.save(None)?;
     }
 
+    // Plain text and Markdown travel through the text surface, which every
+    // build owns; Markdown keeps its markers verbatim since the editor
+    // stores source text rather than rendered output.
+    for (name, body) in [
+        (
+            "plain.txt",
+            "Plain notes\nA second line for the corpus.\n\nTrailing paragraph.",
+        ),
+        ("notes.md", "# Notes\n\n- first\n- second\n\nDone."),
+    ] {
+        let path = root.join(name);
+        let _ = std::fs::remove_file(&path);
+        let mut doc = open(&path)?;
+        doc.insert_str(body);
+        doc.save(None)?;
+    }
+
     // Workbooks: text and numeric cells plus sum formulas that must
     // re-evaluate after every open-save cycle.
     let grid: [(usize, usize, &str); 12] = [
