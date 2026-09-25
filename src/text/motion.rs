@@ -39,9 +39,13 @@ impl TextDocument {
                 return i + 1;
             }
         }
-        line.len_chars().saturating_sub(usize::from(
-            line.char(line.len_chars().saturating_sub(1)) == '\n',
-        ))
+        let len = line.len_chars();
+        if len == 0 {
+            // An empty document has a single zero-length line, and indexing
+            // its would-be last character would panic in ropey.
+            return 0;
+        }
+        len - usize::from(line.char(len - 1) == '\n')
     }
 
     /// given size.

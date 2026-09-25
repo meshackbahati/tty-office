@@ -58,6 +58,22 @@ full = ["docx", "xlsx", "proof", "image", "pdf"]
 
 [dev-dependencies]
 tempfile = "3"
+criterion = "0.5"
+
+# The three benches are standalone binaries rather than harness targets so
+# that criterion owns the measurement loop; recalc additionally needs the
+# xlsx feature to have a workbook to evaluate.
+[[bench]]
+name = "insert"
+harness = false
+
+[[bench]]
+name = "render"
+harness = false
+
+[[bench]]
+name = "recalc"
+harness = false
 
 [profile.dev]
 # Office backends are expensive to optimize; keep dev builds responsive.

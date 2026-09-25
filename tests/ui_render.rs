@@ -1,8 +1,18 @@
 //! Viewport and status rendering through Ratatui's TestBackend.
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::TestBackend;
+use ratatui::style::Modifier;
 use ratatui::Terminal;
 use tty_office::{draw, App, Document, Editor, TextDocument};
+
+fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
+    KeyEvent::new(code, mods)
+}
+
+fn ctrl(c: char) -> KeyEvent {
+    key(KeyCode::Char(c), KeyModifiers::CONTROL)
+}
 
 fn app_with(text: &str) -> App {
     let mut doc = TextDocument::new();
@@ -110,4 +120,70 @@ fn no_page_rule_inside_the_first_page() {
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     let text = buffer_text(&mut term);
     assert!(!text.contains("page 2"), "unexpected rule: {text}");
+}
+
+/// Find positions the current match as the document selection, so the
+/// renderer must paint that span with the reversed selection style and
+/// leave every other character untouched.
+#[test]
+fn find_highlight_marks_the_current_match() {
+    let mut app = app_with("alpha beta alpha");
+    app.handle_key(ctrl('f'));
+    for c in "beta".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    let backend = TestBackend::new(40, 6);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    let text = buffer_text(&mut term);
+    assert!(text.contains("alpha beta alpha"), "body changed: {text}");
+    // The text pane draws a one-row hairline on top, so the first document
+    // line sits at row 1. "beta" occupies columns 6..10 of that line.
+    for x in 6..10u16 {
+        let buffer = term.backend().buffer();
+        let style = buffer[(x, 1)].style();
+        assert!(
+            style.add_modifier.contains(Modifier::REVERSED),
+            "column {x} of the match is not highlighted: {text}"
+        );
+    }
+    let buffer = term.backend().buffer();
+    let outside_style = buffer[(0, 1)].style();
+    assert!(
+        !outside_style.add_modifier.contains(Modifier::REVERSED),
+        "text outside the match is highlighted: {text}"
+    );
+}
+
+/// The spreadsheet grid draws its column-letter header, one-based row
+/// numbers, and cell contents through the same TestBackend surface.
+#[cfg(feature = "xlsx")]
+#[test]
+fn sheet_grid_renders_headers_and_cells() {
+    use tempfile::TempDir;
+
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("grid.xlsx");
+    let mut doc = tty_office::open(&path).expect("open sheet path");
+    {
+        let sheet = doc.sheet_mut().expect("sheet");
+        sheet.set_cell_content("region");
+        sheet.move_cursor(tty_office::Motion::Right, false);
+        sheet.set_cell_content("q1");
+        sheet.move_cursor(tty_office::Motion::Down, false);
+        sheet.move_cursor(tty_office::Motion::LineStart, false);
+        sheet.set_cell_content("north");
+    }
+    let mut app = App::new(doc);
+    let backend = TestBackend::new(50, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    let text = buffer_text(&mut term);
+    assert!(text.contains("region"), "cell missing: {text}");
+    assert!(text.contains("q1"), "cell missing: {text}");
+    assert!(text.contains("north"), "cell missing: {text}");
+    // Column-letter header plus the one-based number for the first row.
+    assert!(text.contains('A'), "column header missing: {text}");
+    assert!(text.contains("    1 "), "row number missing: {text}");
 }

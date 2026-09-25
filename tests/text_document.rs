@@ -194,3 +194,15 @@ fn find_no_wrap_does_not_loop_to_start() {
     assert!(doc.find_no_wrap("abc", 4).is_some());
     assert!(doc.find_no_wrap("abc", 7).is_none());
 }
+
+/// Regression: vertical motion over a zero-length buffer indexed
+/// character zero of the single empty line and panicked inside ropey.
+#[test]
+fn vertical_motion_on_empty_document_does_not_panic() {
+    let mut doc = TextDocument::new();
+    doc.move_cursor(Motion::Down, false);
+    doc.move_cursor(Motion::Up, false);
+    doc.move_cursor(Motion::Down, true);
+    assert_eq!(doc.text_projection(), "");
+    assert_eq!(doc.cursor(), tty_office::Cursor::Char(0));
+}
