@@ -14,6 +14,10 @@ use crate::editor::{Cursor, Editor, Motion};
 use crate::error::DocumentError;
 use crate::text::TextDocument;
 
+mod model;
+
+use model::{load_model, project_body_paragraphs, set_paragraph_text};
+
 /// On-disk package kind for a rich document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RichFormat {
@@ -399,99 +403,39 @@ impl Editor for RichDocument {
     }
 }
 
-fn load_model(path: &Path, format: RichFormat) -> Result<rdocx::Document, DocumentError> {
-    match format {
-        RichFormat::Docx => {
-            rdocx::Document::open(path).map_err(|err| DocumentError::Parse(err.to_string()))
+impl RichDocument {
+    /// Flush the editing surface into the package model so export sees
+    /// current text without clearing the dirty flag.
+    pub(crate) fn prepare_export(&mut self) -> Result<(), DocumentError> {
+        if self.surface.is_dirty() {
+            self.sync_surface_into_model()?;
         }
-        RichFormat::Odt => rdocx::Document::open_odt(path)
-            .map_err(|err| DocumentError::Parse(err.to_string()))
-            .map(|result| result.document),
+        Ok(())
     }
-}
 
-/// Plain-text projection of body paragraphs, one line per paragraph.
-///
-/// Table cell text is intentionally excluded: the TTY editor addresses body
-/// paragraphs as lines, and interleaving tab-separated table rows would make
-/// cursor motion ambiguous. Tables remain in the package model untouched.
-fn project_body_paragraphs(model: &rdocx::Document) -> String {
-    let paragraphs = model.paragraphs();
-    if paragraphs.is_empty() {
-        return String::new();
+    /// Serialize the package model to PDF via `rdocx`.
+    pub(crate) fn export_pdf(&self, path: &Path) -> Result<(), DocumentError> {
+        self.model
+            .save_pdf(path)
+            .map_err(|err| DocumentError::Save {
+                path: path.to_path_buf(),
+                message: err.to_string(),
+            })
     }
-    let mut out = String::new();
-    for (i, p) in paragraphs.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
-        out.push_str(&p.text());
-    }
-    out
-}
 
-/// Rewrite body paragraph `index` so its plain text equals `text`.
-///
-/// Empty or text-only paragraphs are updated in place through the public run
-/// API. Paragraphs that contain non-text run content are left unchanged and
-/// returned as an error so a save never silently drops drawings or fields.
-fn set_paragraph_text(model: &mut rdocx::Document, index: usize, text: &str) -> Result<(), String> {
-    let (current, run_count) = match model.paragraph(index) {
-        Some(p) => (p.text(), p.run_count()),
-        None => return Ok(()),
-    };
-    if current == text {
-        return Ok(());
+    /// Full HTML document for the package model.
+    pub(crate) fn export_html(&self) -> String {
+        self.model.to_html()
     }
-    // Reject paragraphs whose items are not plain runs: rewriting them would
-    // destroy hyperlinks, equations, or drawings. The immutable view exposes
-    // `items()`; the mutable view used below does not.
-    if run_count > 0 {
-        if let Some(p) = model.paragraph(index) {
-            for item in p.items() {
-                let safe = match item {
-                    rdocx::ParagraphItemRef::Run(run) => !run_has_nontext(run),
-                    _ => false,
-                };
-                if !safe {
-                    return Err(format!(
-                        "body paragraph {index} holds non-text content that cannot be rewritten in place"
-                    ));
-                }
-            }
-        }
-    }
-    let mut paragraph = model
-        .paragraph_mut(index)
-        .ok_or_else(|| format!("body paragraph {index} is out of range"))?;
-    let run_count = paragraph.run_count();
-    if run_count == 0 {
-        if !text.is_empty() {
-            paragraph.add_run(text);
-        }
-        return Ok(());
-    }
-    for i in 0..run_count {
-        let Some(mut run) = paragraph.run_mut(i) else {
-            return Err(format!(
-                "body paragraph {index} run {i} is not directly mutable"
-            ));
-        };
-        if i == 0 {
-            run.set_text(text);
-        } else {
-            run.set_text("");
-        }
-    }
-    Ok(())
-}
 
-fn run_has_nontext(run: rdocx::RunRef<'_>) -> bool {
-    for item in run.items() {
-        match item {
-            rdocx::RunItemRef::Text(_) | rdocx::RunItemRef::Tab => {}
-            _ => return true,
-        }
+    /// Markdown body for the package model.
+    pub(crate) fn export_markdown(&self) -> String {
+        self.model.to_markdown()
     }
-    false
+
+    /// Character-index revision of the editing surface, for proof scheduling.
+    #[cfg(feature = "proof")]
+    pub(crate) fn revision(&self) -> u64 {
+        self.surface.revision()
+    }
 }

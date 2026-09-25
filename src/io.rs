@@ -22,9 +22,11 @@ pub fn load_rope(path: &Path) -> Result<Rope, DocumentError> {
     Rope::from_reader(&mut reader).map_err(DocumentError::Io)
 }
 
-/// Write a rope to `path` atomically: temp file in the same directory, then
-/// rename.
-pub fn save_rope_atomic(path: &Path, rope: &Rope) -> Result<(), DocumentError> {
+/// Shared atomic write: temp file in the same directory, then rename.
+fn atomic_write<F>(path: &Path, write: F) -> Result<(), DocumentError>
+where
+    F: FnOnce(&mut BufWriter<fs::File>) -> std::io::Result<()>,
+{
     let dir = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -39,7 +41,7 @@ pub fn save_rope_atomic(path: &Path, rope: &Rope) -> Result<(), DocumentError> {
     let write_result = (|| -> std::io::Result<()> {
         let file = fs::File::create(&tmp_path)?;
         let mut writer = BufWriter::new(file);
-        rope.write_to(&mut writer)?;
+        write(&mut writer)?;
         writer.flush()?;
         writer.into_inner()?.sync_all()
     })();
@@ -56,4 +58,21 @@ pub fn save_rope_atomic(path: &Path, rope: &Rope) -> Result<(), DocumentError> {
         path: path.to_path_buf(),
         message: err.to_string(),
     })
+}
+
+/// Write a rope to `path` atomically: temp file in the same directory, then
+/// rename.
+pub fn save_rope_atomic(path: &Path, rope: &Rope) -> Result<(), DocumentError> {
+    atomic_write(path, |w| rope.write_to(w))
+}
+
+/// Write a UTF-8 string to `path` atomically.
+pub fn save_str_atomic(path: &Path, contents: &str) -> Result<(), DocumentError> {
+    atomic_write(path, |w| w.write_all(contents.as_bytes()))
+}
+
+/// Write raw bytes to `path` atomically.
+#[cfg_attr(not(feature = "pdf"), allow(dead_code))]
+pub fn save_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), DocumentError> {
+    atomic_write(path, |w| w.write_all(bytes))
 }

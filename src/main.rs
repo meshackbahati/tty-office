@@ -43,6 +43,7 @@ fn main() -> Result<()> {
 
 fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
     while !app.should_quit {
+        app.tick();
         terminal.draw(|frame| draw(frame, app))?;
         // Poll with a timeout so a resize or external signal is picked up
         // even when the user is not typing.

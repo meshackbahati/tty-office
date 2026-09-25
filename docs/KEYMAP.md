@@ -30,7 +30,7 @@ in this file; they do not replace the whole table.
 | Ctrl+A | Select the entire document. |
 | Alt+B | Toggle Markdown bold (`**`) around the selection. |
 | Alt+I | Toggle Markdown italic (`*`) around the selection. |
-| Ctrl+P | Export. Full export paths arrive with Phase 5. |
+| Ctrl+P | Export to PDF, HTML, or Markdown. Format follows the path extension. |
 
 ## Motion and selection
 

@@ -157,6 +157,7 @@ impl TextDocument {
     pub(crate) fn mark_dirty(&mut self) {
         self.dirty = true;
         self.word_count = None;
+        self.revision = self.revision.wrapping_add(1);
         let len = self.rope.len_chars();
         if self.cursor > len {
             self.cursor = len;

@@ -2,7 +2,11 @@
 //!
 //! Layout is content-first: the text pane takes the full frame minus two rows,
 //! one hairline status bar and one message row. Colors stay monochrome with a
-//! single accent for the status filename and selection highlight.
+//! single accent for the status filename and selection highlight. The text
+//! pane marks page boundaries with a hairline rule carrying the page number,
+//! using the same [`crate::page::PageLayout`] the PDF exporter chunks on.
+
+mod status;
 
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -12,7 +16,7 @@ use ratatui::Frame;
 use unicode_width::UnicodeWidthChar;
 
 use crate::app::{App, Mode};
-use crate::editor::Editor;
+use crate::page::PageLayout;
 
 /// Accent used for the filename and active hints.
 const ACCENT: Color = Color::Cyan;
@@ -20,6 +24,20 @@ const ACCENT: Color = Color::Cyan;
 /// second palette color.
 fn selected_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED)
+}
+
+/// Style for misspelled words: red plus underline, one accent beyond the
+/// monochrome baseline so errors are visible without a second hue for layout.
+fn misspelled_style() -> Style {
+    Style::default()
+        .fg(Color::Red)
+        .add_modifier(Modifier::UNDERLINED)
+}
+
+/// Per-character decoration for one rendered line.
+struct LineDecor<'a> {
+    selection: Option<(usize, usize)>,
+    misspelled: &'a [(usize, usize)],
 }
 
 /// Draw one frame.
@@ -39,7 +57,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     app.set_viewport(text_h, text_w);
 
     draw_text(frame, app, chunks[0]);
-    draw_status(frame, app, chunks[1]);
+    status::draw_status(frame, app, chunks[1]);
     draw_message(frame, app, chunks[2]);
 
     if app.mode == Mode::Help {
@@ -55,7 +73,7 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     }
     // Text and Rich share a line-oriented surface; Phase 4 adds a grid pane
     // for Sheet rather than forcing cells through this renderer.
-    let (selection, rowoff, coloff, cursor_line, cursor_col, line_count) = {
+    let (selection, mut rowoff, coloff, cursor_line, cursor_col, line_count) = {
         let surface = match app.doc.prose_surface() {
             Some(s) => s,
             None => {
@@ -72,13 +90,40 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             surface.line_count(),
         )
     };
+    #[cfg(feature = "proof")]
+    let misspelled: Vec<(usize, usize)> = app.misspelled_ranges().to_vec();
+    #[cfg(not(feature = "proof"))]
+    let misspelled: Vec<(usize, usize)> = Vec::new();
+    let decor = LineDecor {
+        selection,
+        misspelled: &misspelled,
+    };
     let height = area.height as usize;
     let width = area.width as usize;
+    let layout = app.page_layout();
+
+    // Break rules above page starts consume viewport rows of their own, so
+    // pull the window down until the caret and its rules fit. The stored
+    // scroll offset is left untouched: scrolling stays measured in text lines
+    // and each frame derives the same display position deterministically.
+    while rowoff < cursor_line
+        && cursor_line - rowoff + layout.breaks_between(rowoff, cursor_line) >= height
+    {
+        rowoff += 1;
+    }
 
     let mut lines: Vec<Line<'static>> = Vec::with_capacity(height);
-    for row in 0..height {
-        let line_idx = rowoff + row;
-        if line_idx >= line_count {
+    let mut cur = rowoff;
+    // Whether the rule above `cur` has already been pushed for this line;
+    // without it the same boundary would repaint on every remaining row.
+    let mut rule_drawn = false;
+    for _row in 0..height {
+        if !rule_drawn && cur < line_count && cur > rowoff && layout.is_page_start(cur) {
+            lines.push(page_rule(&layout, cur, width));
+            rule_drawn = true;
+            continue;
+        }
+        if cur >= line_count {
             lines.push(Line::from(""));
             continue;
         }
@@ -87,20 +132,19 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                 .doc
                 .prose_surface()
                 .expect("prose surface checked above");
-            (
-                surface.line_text(line_idx),
-                surface.line_char_start(line_idx),
-            )
+            (surface.line_text(cur), surface.line_char_start(cur))
         };
         lines.push(render_line(
             &raw,
             line_start,
             coloff,
             width,
-            selection,
-            line_idx == cursor_line,
+            &decor,
+            cur == cursor_line,
             cursor_col,
         ));
+        cur += 1;
+        rule_drawn = false;
     }
 
     let paragraph = Paragraph::new(lines).block(
@@ -110,8 +154,9 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     );
     frame.render_widget(paragraph, area);
 
-    // Place the terminal cursor on the caret when it is inside the viewport.
-    let view_row = cursor_line.saturating_sub(rowoff);
+    // Place the terminal cursor on the caret when it is inside the viewport,
+    // counting the rule rows the caret's page boundary has inserted above it.
+    let view_row = cursor_line - rowoff + layout.breaks_between(rowoff, cursor_line);
     if view_row < height {
         let disp = cursor_col.saturating_sub(coloff);
         if disp < width {
@@ -120,6 +165,16 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             frame.set_cursor_position((x, y));
         }
     }
+}
+
+/// Hairline rule marking the boundary above `line`, carrying its page number.
+fn page_rule(layout: &PageLayout, line: usize, width: usize) -> Line<'static> {
+    let label = format!(" page {} ", layout.page_of(line));
+    let pad = width.saturating_sub(label.chars().count());
+    let before = pad / 2;
+    let after = pad - before;
+    let text = format!("{}{}{}", "─".repeat(before), label, "─".repeat(after));
+    Line::styled(text, Style::default().fg(Color::DarkGray))
 }
 
 #[cfg(feature = "xlsx")]
@@ -226,7 +281,7 @@ fn render_line<'a>(
     line_start: usize,
     coloff: usize,
     width: usize,
-    selection: Option<(usize, usize)>,
+    decor: &LineDecor<'_>,
     is_cursor_line: bool,
     _cursor_col: usize,
 ) -> Line<'a> {
@@ -234,52 +289,56 @@ fn render_line<'a>(
     let mut disp = 0usize;
     let mut char_idx = line_start;
     let mut buf = String::new();
-    let mut buf_selected = false;
+    let mut buf_style = Style::default();
 
-    let mut flush = |buf: &mut String, selected: bool, spans: &mut Vec<Span<'a>>| {
+    let style_for = |idx: usize| -> Style {
+        let selected = decor.selection.is_some_and(|(a, b)| idx >= a && idx < b);
+        if selected {
+            selected_style()
+        } else if decor.misspelled.iter().any(|&(a, b)| idx >= a && idx < b) {
+            misspelled_style()
+        } else {
+            Style::default()
+        }
+    };
+
+    let flush = |buf: &mut String, style: Style, spans: &mut Vec<Span<'a>>| {
         if buf.is_empty() {
             return;
         }
-        let style = if selected {
-            selected_style()
-        } else {
-            Style::default()
-        };
         spans.push(Span::styled(std::mem::take(buf), style));
-        let _ = selected;
     };
 
     for ch in raw.chars() {
         if ch == '\t' {
+            // One rope character expands to up to four visual spaces; all
+            // of them share the tab's character index for decoration.
             let tab_w = 4 - (disp % 4);
+            let style = style_for(char_idx);
             for _ in 0..tab_w {
-                push_char(
-                    &mut buf,
-                    ' ',
-                    &mut disp,
-                    coloff,
-                    width,
-                    &mut buf_selected,
-                    selection,
-                    char_idx,
-                    &mut spans,
-                    &mut flush,
-                );
-                char_idx += 1;
+                if style != buf_style && !buf.is_empty() {
+                    flush(&mut buf, buf_style, &mut spans);
+                }
+                buf_style = style;
+                if disp >= coloff && disp < coloff + width {
+                    buf.push(' ');
+                }
+                disp += 1;
             }
+            char_idx += 1;
             continue;
         }
         let w = ch.width().unwrap_or(0);
         if disp + w > coloff + width && disp >= coloff {
             break;
         }
-        let selected = selection.is_some_and(|(a, b)| char_idx >= a && char_idx < b);
-        if selected != buf_selected && !buf.is_empty() {
-            flush(&mut buf, buf_selected, &mut spans);
-            buf_selected = selected;
+        let style = style_for(char_idx);
+        if style != buf_style && !buf.is_empty() {
+            flush(&mut buf, buf_style, &mut spans);
+            buf_style = style;
         }
         if buf.is_empty() {
-            buf_selected = selected;
+            buf_style = style;
         }
         if disp >= coloff && disp + w <= coloff + width {
             buf.push(ch);
@@ -288,115 +347,15 @@ fn render_line<'a>(
             for _ in 0..(coloff + width - disp) {
                 buf.push(' ');
             }
-            flush(&mut buf, buf_selected, &mut spans);
+            flush(&mut buf, buf_style, &mut spans);
             break;
         }
         disp += w;
         char_idx += 1;
         let _ = is_cursor_line;
     }
-    flush(&mut buf, buf_selected, &mut spans);
+    flush(&mut buf, buf_style, &mut spans);
     Line::from(spans)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn push_char<'a>(
-    buf: &mut String,
-    ch: char,
-    disp: &mut usize,
-    coloff: usize,
-    width: usize,
-    buf_selected: &mut bool,
-    selection: Option<(usize, usize)>,
-    char_idx: usize,
-    spans: &mut Vec<Span<'a>>,
-    flush: &mut dyn FnMut(&mut String, bool, &mut Vec<Span<'a>>),
-) {
-    let selected = selection.is_some_and(|(a, b)| char_idx >= a && char_idx < b);
-    if *buf_selected != selected && !buf.is_empty() {
-        flush(buf, *buf_selected, spans);
-    }
-    *buf_selected = selected;
-    if *disp >= coloff && *disp < coloff + width {
-        buf.push(ch);
-    }
-    *disp += 1;
-}
-
-fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
-    let name = app.doc.display_name();
-    let dirty = if app.doc.is_dirty() { " [+]" } else { "" };
-    let (line, col, words) = match app.doc.prose_surface() {
-        Some(t) => (
-            t.cursor_line() + 1,
-            t.cursor_display_col() + 1,
-            t.word_count(),
-        ),
-        None => {
-            #[cfg(feature = "xlsx")]
-            if let crate::Document::Sheet(sheet) = &app.doc {
-                let (r, c) = sheet.cursor_cell();
-                let ref_str = crate::sheet::SheetDocument::cell_ref(r, c);
-                let left = Line::from(vec![
-                    Span::styled(
-                        format!(" {name}{dirty}"),
-                        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(" │ "),
-                    Span::raw(format!("Cell {ref_str}")),
-                ]);
-                let mode = match app.mode {
-                    Mode::Help => "HELP",
-                    Mode::ConfirmQuit => "EXIT?",
-                    Mode::Prompt(_) => "PROMPT",
-                    Mode::Normal => "EDIT",
-                };
-                render_status_bar(frame, area, left, mode);
-                return;
-            }
-            (1, 1, 0)
-        }
-    };
-    let mode = match app.mode {
-        Mode::Help => "HELP",
-        Mode::ConfirmQuit => "EXIT?",
-        Mode::Prompt(_) => "PROMPT",
-        Mode::Normal => "EDIT",
-    };
-    let left = Line::from(vec![
-        Span::styled(
-            format!(" {name}{dirty}"),
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" │ "),
-        Span::raw(format!("Ln {line}, Col {col}")),
-        Span::raw(" │ "),
-        Span::raw(format!("{words} words")),
-    ]);
-    render_status_bar(frame, area, left, mode);
-}
-
-fn render_status_bar(frame: &mut Frame<'_>, area: Rect, left: Line<'static>, mode: &str) {
-    let right = Line::from(Span::styled(
-        format!("{mode} "),
-        Style::default().fg(Color::DarkGray),
-    ));
-    let bar = Paragraph::new(left).style(Style::default().bg(Color::Black));
-    frame.render_widget(bar, area);
-    let right_width = right.width() as u16;
-    if area.width > right_width {
-        let x = area.x + area.width - right_width;
-        let right_area = Rect {
-            x,
-            y: area.y,
-            width: right_width,
-            height: 1,
-        };
-        frame.render_widget(
-            Paragraph::new(right).style(Style::default().bg(Color::Black)),
-            right_area,
-        );
-    }
 }
 
 fn draw_message(frame: &mut Frame<'_>, app: &App, area: Rect) {

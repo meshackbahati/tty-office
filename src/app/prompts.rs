@@ -90,6 +90,16 @@ impl App {
                 self.scroll_to_cursor();
                 self.message.clear();
             }
+            PromptKind::Export => {
+                if value.is_empty() {
+                    self.message = "Export cancelled".to_string();
+                    return;
+                }
+                match crate::print::export(&mut self.doc, Path::new(&value)) {
+                    Ok(()) => self.message = format!("Exported {value}"),
+                    Err(err) => self.message = format!("Export failed: {err}"),
+                }
+            }
         }
     }
 

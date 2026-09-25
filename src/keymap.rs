@@ -44,7 +44,7 @@ pub enum Action {
     ToggleBold,
     /// Wrap the selection or word in Markdown italic markers.
     ToggleItalic,
-    /// Export the buffer (Phase 5); for now reports not yet available.
+    /// Export to PDF, HTML, or Markdown; format follows the path extension.
     Export,
     /// Insert a literal character.
     Insert(char),
@@ -216,6 +216,25 @@ pub struct Config {
     /// Map from action name to chord spec, e.g. `exit = "ctrl+x"`.
     #[serde(default)]
     pub keys: HashMap<String, String>,
+    /// Logical lines per page; absent or zero keeps the default page model.
+    #[serde(default)]
+    pub page_lines: Option<usize>,
+}
+
+impl Config {
+    /// Read `~/.config/tty-office/config.toml`, falling back to the default
+    /// configuration when the file is missing or malformed, because a broken
+    /// user config must not prevent the editor from starting.
+    pub fn load_user() -> Self {
+        if let Some(path) = user_config_path() {
+            if let Ok(text) = fs::read_to_string(&path) {
+                if let Ok(cfg) = toml::from_str::<Config>(&text) {
+                    return cfg;
+                }
+            }
+        }
+        Self::default()
+    }
 }
 
 /// Chord to action lookup with merged defaults.
@@ -375,7 +394,7 @@ pub fn describe(action: &Action) -> String {
         Action::SelectAll => "Select all".into(),
         Action::ToggleBold => "Bold (**)".into(),
         Action::ToggleItalic => "Italic (*)".into(),
-        Action::Export => "Export".into(),
+        Action::Export => "Export (PDF, HTML, Markdown)".into(),
         Action::Insert(_) => "Insert character".into(),
         Action::InsertNewline => "New line".into(),
         Action::Backspace => "Delete previous character".into(),
@@ -418,4 +437,23 @@ fn action_from_name(name: &str) -> Option<Action> {
 fn user_config_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     Some(PathBuf::from(home).join(".config/tty-office/config.toml"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_parses_page_lines_alongside_keys() {
+        let cfg: Config =
+            toml::from_str("page_lines = 42\n[keys]\nexit = \"ctrl+q\"").expect("valid config");
+        assert_eq!(cfg.page_lines, Some(42));
+        assert_eq!(cfg.keys.get("exit").map(String::as_str), Some("ctrl+q"));
+    }
+
+    #[test]
+    fn config_defaults_when_page_lines_absent() {
+        let cfg: Config = toml::from_str("[keys]\nexit = \"ctrl+q\"").expect("valid config");
+        assert_eq!(cfg.page_lines, None);
+    }
 }

@@ -206,10 +206,12 @@ fn ctrl_s_saves_and_reports_write() {
 }
 
 #[test]
-fn ctrl_p_export_reports_phase_five() {
+fn ctrl_p_opens_export_prompt() {
     let mut app = plain_app();
     app.handle_key(ctrl('p'));
-    assert!(app.message.contains("Phase 5"));
+    assert_eq!(app.mode, Mode::Prompt(PromptKind::Export));
+    assert_eq!(app.prompt_label, "Export to: ");
+    assert_eq!(app.prompt_buf, "export.pdf");
 }
 
 #[test]

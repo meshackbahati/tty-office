@@ -24,6 +24,10 @@ mod error;
 mod history;
 mod io;
 mod keymap;
+mod page;
+mod print;
+#[cfg(feature = "proof")]
+mod proof;
 #[cfg(feature = "docx")]
 mod rich;
 #[cfg(feature = "xlsx")]
@@ -37,6 +41,10 @@ pub use editor::{Cursor, Editor, Motion};
 pub use error::DocumentError;
 pub use history::History;
 pub use keymap::{format_chord, Action, Chord, Keymap};
+pub use page::PageLayout;
+pub use print::{export, ExportFormat};
+#[cfg(feature = "proof")]
+pub use proof::{Misspelling, ProofEngine};
 #[cfg(feature = "docx")]
 pub use rich::{RichDocument, RichFormat};
 #[cfg(feature = "xlsx")]

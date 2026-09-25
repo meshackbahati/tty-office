@@ -38,6 +38,9 @@ pub struct TextDocument {
     history: History,
     /// Cached full-document word count; `None` when invalid.
     word_count: Option<usize>,
+    /// Bumped on every content mutation so background jobs (proofing) can
+    /// skip work when the projection has not changed since they last ran.
+    revision: u64,
 }
 
 impl TextDocument {
@@ -54,6 +57,7 @@ impl TextDocument {
             goal_col: 0,
             history: History::new(),
             word_count: None,
+            revision: 0,
         }
     }
 
@@ -71,6 +75,7 @@ impl TextDocument {
             goal_col: 0,
             history: History::new(),
             word_count: None,
+            revision: 0,
         })
     }
 
@@ -89,6 +94,12 @@ impl TextDocument {
         self.goal_col = 0;
         self.history = History::new();
         self.word_count = None;
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Monotonic content revision; changes on every edit and on load.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// Clear the dirty flag after the caller has persisted this buffer's

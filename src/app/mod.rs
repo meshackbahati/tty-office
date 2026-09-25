@@ -15,6 +15,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::editor::{Editor, Motion};
 use crate::error::DocumentError;
 use crate::keymap::{Action, Keymap};
+use crate::page::PageLayout;
 use crate::text::TextDocument;
 use crate::Document;
 
@@ -48,6 +49,8 @@ pub enum PromptKind {
     /// Spreadsheet cell entry, commit on Enter.
     #[cfg(feature = "xlsx")]
     CellEdit,
+    /// Path prompt for export; format follows the extension.
+    Export,
 }
 
 /// Application state driven by the event loop.
@@ -76,6 +79,16 @@ pub struct App {
     pub view_h: usize,
     /// Viewport width from the last frame, for horizontal scroll.
     pub view_w: usize,
+    /// Spell-check worker; `None` when the `proof` feature is off or no
+    /// system dictionary was found at startup.
+    #[cfg(feature = "proof")]
+    proof: Option<crate::proof::ProofEngine>,
+    /// Surface revision last handed to the proof engine (`None` = never).
+    #[cfg(feature = "proof")]
+    proof_rev: Option<u64>,
+    /// Page geometry for prose documents, from `page_lines` in the user
+    /// config or the shared default when the key is absent.
+    page_layout: PageLayout,
 }
 
 impl App {
@@ -94,7 +107,21 @@ impl App {
             replace_with: String::new(),
             view_h: 24,
             view_w: 80,
+            #[cfg(feature = "proof")]
+            proof: crate::proof::ProofEngine::load().ok(),
+            #[cfg(feature = "proof")]
+            proof_rev: None,
+            page_layout: PageLayout::new(
+                crate::keymap::Config::load_user()
+                    .page_lines
+                    .unwrap_or(PageLayout::DEFAULT_LINES),
+            ),
         }
+    }
+
+    /// Page geometry the viewport and the status bar render with.
+    pub fn page_layout(&self) -> PageLayout {
+        self.page_layout
     }
 
     /// Update viewport metrics reported by the UI after each frame.
@@ -198,7 +225,9 @@ impl App {
             Action::ToggleBold => self.wrap_selection("**"),
             Action::ToggleItalic => self.wrap_selection("*"),
             Action::Export => {
-                self.message = "Export arrives with Phase 5 (PDF, HTML, Markdown)".to_string();
+                self.mode = Mode::Prompt(PromptKind::Export);
+                self.prompt_label = "Export to: ".to_string();
+                self.prompt_buf = self.export_suggestion();
             }
             Action::Confirm | Action::Cancel | Action::PromptChar(_) | Action::PromptBackspace => {
                 self.message.clear();
@@ -343,6 +372,55 @@ impl App {
             }
             _ => None,
         }
+    }
+
+    /// Default export destination shown in the prompt.
+    fn export_suggestion(&self) -> String {
+        match self.doc.path() {
+            Some(p) => {
+                let mut out = p.to_path_buf();
+                out.set_extension("pdf");
+                out.to_string_lossy().into_owned()
+            }
+            None => "export.pdf".to_string(),
+        }
+    }
+
+    /// Drain proof results and schedule a re-check when prose changed.
+    ///
+    /// Called once per event-loop tick; sheets are not proofed.
+    pub fn tick(&mut self) {
+        #[cfg(feature = "proof")]
+        {
+            let (rev, text) = match &self.doc {
+                Document::Text(t) => (Some(t.revision()), Some(t.text_projection())),
+                #[cfg(feature = "docx")]
+                Document::Rich(r) => (Some(r.revision()), Some(r.text_projection())),
+                #[cfg(feature = "xlsx")]
+                Document::Sheet(_) => (None, None),
+            };
+            if let (Some(engine), Some(rev), Some(text)) = (self.proof.as_mut(), rev, text) {
+                if self.proof_rev != Some(rev) {
+                    self.proof_rev = Some(rev);
+                    engine.schedule(&text);
+                }
+                engine.poll();
+            }
+        }
+    }
+
+    /// Misspelled character ranges for the current prose surface.
+    ///
+    /// Sheets never schedule a check, so their range list stays empty.
+    #[cfg(feature = "proof")]
+    pub fn misspelled_ranges(&self) -> &[crate::proof::Misspelling] {
+        self.proof.as_ref().map(|p| p.ranges()).unwrap_or_default()
+    }
+
+    /// Number of misspellings currently underlined in the status bar.
+    #[cfg(feature = "proof")]
+    pub fn misspelling_count(&self) -> usize {
+        self.misspelled_ranges().len()
     }
 }
 
