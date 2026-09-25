@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
-use crossterm::event::{self, Event};
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
+use crossterm::execute;
 use ratatui::DefaultTerminal;
 use tty_office::{draw, open_optional, App};
 
@@ -29,6 +30,14 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let terminal = ratatui::init();
+    // Mouse reporting stays enabled across a panic unless the hook turns
+    // it off first, so chain the disable ahead of ratatui's restore hook.
+    let _ = execute!(std::io::stdout(), EnableMouseCapture);
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = execute!(std::io::stdout(), DisableMouseCapture);
+        previous(info);
+    }));
     if cli.self_test_panic {
         // The hook installed by ratatui::init must restore the terminal before
         // the process exits; the panic-restore test asserts on that path.
@@ -37,6 +46,7 @@ fn main() -> Result<()> {
     let doc = open_optional(cli.path.as_ref())?;
     let mut app = App::new(doc);
     let result = run(terminal, &mut app);
+    let _ = execute!(std::io::stdout(), DisableMouseCapture);
     ratatui::restore();
     result
 }
@@ -50,6 +60,7 @@ fn run(mut terminal: DefaultTerminal, app: &mut App) -> Result<()> {
         if event::poll(Duration::from_millis(100))? {
             match event::read()? {
                 Event::Key(key) => app.handle_key(key),
+                Event::Mouse(mouse) => app.handle_mouse(mouse),
                 Event::Resize(_, _) => {
                     // Next draw picks up the new size via draw's set_viewport.
                 }

@@ -83,6 +83,26 @@ impl App {
             Action::NextTab => self.next_tab(),
             Action::PrevTab => self.prev_tab(),
             Action::CloseTab => self.close_tab(),
+            Action::ToggleSidebar => {
+                self.sidebar = !self.sidebar;
+            }
+            Action::NewText => {
+                self.new_tab(super::sidebar::new_text_doc());
+                let name = self.doc.display_name();
+                self.message = format!("New {name}");
+            }
+            Action::NewSheet => {
+                #[cfg(feature = "xlsx")]
+                {
+                    self.new_tab(super::sidebar::new_sheet_doc());
+                    let name = self.doc.display_name();
+                    self.message = format!("New {name}");
+                }
+                #[cfg(not(feature = "xlsx"))]
+                {
+                    self.message = "Spreadsheet support needs the xlsx feature".to_string();
+                }
+            }
             Action::Save => {
                 if self.doc.path().is_none() {
                     // Without a path there is nothing to write to; the

@@ -12,6 +12,10 @@ use crate::Document;
 
 use super::App;
 
+/// Longest title drawn for one tab before truncation; shared with the
+/// renderer and the mouse hit test so the three agree by construction.
+pub(crate) const TITLE_LIMIT: usize = 20;
+
 impl App {
     /// Number of open tabs, including the active document.
     pub fn tab_count(&self) -> usize {
@@ -42,6 +46,15 @@ impl App {
             title.push('*');
         }
         Some(title)
+    }
+
+    /// Rendered strip cell for tab `i`, mirroring the layout the renderer
+    /// and the mouse hit test share.
+    pub(crate) fn tab_cell(&self, i: usize) -> Option<String> {
+        let title = self.tab_title(i)?;
+        let short: String = title.chars().take(TITLE_LIMIT).collect();
+        let divider = if i == 0 { "" } else { "│" };
+        Some(format!("{divider} {short} "))
     }
 
     /// Whether any open tab holds unsaved changes.

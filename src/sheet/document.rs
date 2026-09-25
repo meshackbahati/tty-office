@@ -164,6 +164,25 @@ impl SheetDocument {
         Some(((r0, c0), (r1, c1)))
     }
 
+    /// Place the caret on a cell for mouse clicks, clearing any selection.
+    pub fn click_cell(&mut self, row: usize, col: usize) {
+        self.cursor_row = row;
+        self.cursor_col = col;
+        self.anchor = None;
+    }
+
+    /// Extend the selection from the click origin to a cell while dragging.
+    pub fn select_to(&mut self, origin: (usize, usize), to: (usize, usize)) {
+        self.anchor = Some(origin);
+        self.cursor_row = to.0;
+        self.cursor_col = to.1;
+    }
+
+    /// Scroll the grid vertically without moving the caret.
+    pub fn scroll_rows(&mut self, delta: i32) {
+        self.rowoff = (self.rowoff as i32 + delta).max(0) as usize;
+    }
+
     /// Read-only access to the grid for tests and the renderer.
     pub fn cell(&self, row: usize, col: usize) -> Option<&Cell> {
         self.cells.get(&(row, col))

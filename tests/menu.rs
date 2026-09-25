@@ -72,10 +72,11 @@ fn typing_a_mnemonic_switches_menus() {
 fn menu_arrows_activate_close_tab() {
     let mut app = plain_app();
     app.handle_key(alt('f'));
-    app.handle_key(key(KeyCode::Down, KeyModifiers::NONE));
-    app.handle_key(key(KeyCode::Down, KeyModifiers::NONE));
+    for _ in 0..4 {
+        app.handle_key(key(KeyCode::Down, KeyModifiers::NONE));
+    }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
-    // File item 2 is Close tab; the only tab is clean, so it quits.
+    // File item 4 is Close tab; the only tab is clean, so it quits.
     assert!(app.should_quit);
 }
 
@@ -83,11 +84,11 @@ fn menu_arrows_activate_close_tab() {
 fn menu_save_on_pathless_document_prompts_for_name() {
     let mut app = plain_app();
     app.handle_key(alt('f'));
-    for _ in 0..3 {
+    for _ in 0..5 {
         app.handle_key(key(KeyCode::Down, KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
-    // File item 3 is Save, which folds into Save As without a path.
+    // File item 5 is Save, which folds into Save As without a path.
     assert_eq!(app.mode, Mode::Prompt(PromptKind::SaveAs));
     assert_eq!(app.prompt_buf, "untitled.txt");
 }

@@ -7,6 +7,7 @@
 //! using the same [`crate::page::PageLayout`] the PDF exporter chunks on.
 
 mod menu;
+mod sidebar;
 mod status;
 mod tabs;
 
@@ -17,7 +18,8 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 use unicode_width::UnicodeWidthChar;
 
-use crate::app::{App, Mode};
+use crate::app::sidebar::{MIN_WIDTH_FOR_SIDEBAR, SIDEBAR_WIDTH};
+use crate::app::{App, Mode, ViewRects};
 use crate::page::PageLayout;
 
 /// Accent used for the filename and active hints.
@@ -50,11 +52,13 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     }
     // The menu bar always takes the first row; the tab strip takes a row
     // of its own only once a second tab exists, and a single document
-    // keeps that height for text.
+    // keeps that height for text. The sidebar takes a fixed column when
+    // enabled and the frame is wide enough to spare it.
     let show_tabs = app.tab_count() > 1;
     if show_tabs && area.height < 5 {
         return;
     }
+    let show_side = app.sidebar && area.width >= MIN_WIDTH_FOR_SIDEBAR;
     let mut constraints = vec![Constraint::Length(1)];
     if show_tabs {
         constraints.push(Constraint::Length(1));
@@ -65,19 +69,42 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
         Constraint::Length(1),
     ]);
     let chunks = Layout::vertical(constraints).split(area);
-    // Row 0 is the menu bar; the text pane starts below it and any tab row.
+    // Row 0 is the menu bar; the body starts below it and any tab row.
     let base = 1;
-    let (text, status, message) = if show_tabs {
+    let tab_y = if show_tabs {
         tabs::draw_tab_bar(frame, app, chunks[base]);
-        (chunks[base + 1], chunks[base + 2], chunks[base + 3])
+        Some(chunks[base].y)
     } else {
-        (chunks[base], chunks[base + 1], chunks[base + 2])
+        None
+    };
+    let body = chunks[base + if show_tabs { 1 } else { 0 }];
+    let (status, message) = (
+        chunks[base + if show_tabs { 1 } else { 0 } + 1],
+        chunks[base + if show_tabs { 1 } else { 0 } + 2],
+    );
+    let (side, text) = if show_side {
+        let cols =
+            Layout::horizontal([Constraint::Length(SIDEBAR_WIDTH), Constraint::Min(1)]).split(body);
+        (Some(cols[0]), cols[1])
+    } else {
+        (None, body)
     };
 
     menu::draw_menu_bar(frame, app, chunks[0]);
 
     let (text_h, text_w) = (text.height as usize, text.width as usize);
     app.set_viewport(text_h, text_w);
+    app.view = ViewRects {
+        text_x: text.x,
+        text_y: text.y,
+        text_h: text.height,
+        side_x: side.map(|r| r.x).unwrap_or(0),
+        side_w: side.map(|r| r.width).unwrap_or(0),
+        tab_y,
+    };
+    if let Some(side) = side {
+        sidebar::draw_sidebar(frame, app, side);
+    }
 
     draw_text(frame, app, text);
     status::draw_status(frame, app, status);

@@ -20,11 +20,21 @@ pub(crate) struct MenuItem {
     pub(crate) shortcut: &'static str,
 }
 
-static FILE_ITEMS: [MenuItem; 7] = [
+static FILE_ITEMS: [MenuItem; 9] = [
     MenuItem {
         label: "New tab",
         action: Action::New,
         shortcut: "Ctrl+N",
+    },
+    MenuItem {
+        label: "New text file",
+        action: Action::NewText,
+        shortcut: "Ctrl+Shift+N",
+    },
+    MenuItem {
+        label: "New spreadsheet",
+        action: Action::NewSheet,
+        shortcut: "Ctrl+Shift+E",
     },
     MenuItem {
         label: "Open…",
@@ -125,6 +135,14 @@ pub(crate) fn items(menu: usize) -> &'static [MenuItem] {
     }
 }
 
+/// Bar index whose label contains column `x`, if any.
+pub(crate) fn hit_label(x: u16) -> Option<usize> {
+    (0..LABELS.len()).find(|&i| {
+        let (a, b) = label_span(i);
+        x >= a && x < b
+    })
+}
+
 /// Column span of menu `idx` on the bar, end exclusive. Labels carry one
 /// leading space and are separated by two spaces.
 pub(crate) fn label_span(idx: usize) -> (u16, u16) {
@@ -149,6 +167,12 @@ pub(crate) fn dropdown(idx: usize) -> (u16, u16) {
         .max()
         .unwrap_or(10) as u16;
     (x.saturating_sub(1), inner + 2)
+}
+
+/// Item index at absolute row `y` inside an open menu, if the row holds one.
+pub(crate) fn hit_item(menu: usize, y: u16) -> Option<usize> {
+    let n = items(menu).len() as u16;
+    y.checked_sub(2).filter(|&r| r < n).map(|r| r as usize)
 }
 
 impl App {
@@ -212,6 +236,16 @@ impl App {
                 }
             }
             _ => self.open_menu = None,
+        }
+    }
+
+    /// Toggle the dropdown for bar index `i` for mouse clicks.
+    pub(crate) fn toggle_menu(&mut self, i: usize) {
+        if self.open_menu == Some(i) {
+            self.open_menu = None;
+        } else {
+            self.open_menu = Some(i);
+            self.menu_item = 0;
         }
     }
 

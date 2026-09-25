@@ -5,11 +5,13 @@
 //! directly, which keeps the event loop and the tests separable.
 
 pub(crate) mod menu;
+mod mouse;
 mod normal;
 mod open;
 mod prompts;
 #[cfg(feature = "xlsx")]
 mod sheet_keys;
+pub(crate) mod sidebar;
 pub(crate) mod tabs;
 
 pub use open::open_optional;
@@ -63,6 +65,21 @@ pub enum PromptKind {
     ReplaceConfirm,
 }
 
+/// Absolute frame geometry the mouse handler needs, refreshed on every
+/// draw. Plain offsets keep the application shell free of renderer types.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct ViewRects {
+    /// Text pane origin and height.
+    pub text_x: u16,
+    pub text_y: u16,
+    pub text_h: u16,
+    /// Sidebar origin and width; zero width means hidden.
+    pub side_x: u16,
+    pub side_w: u16,
+    /// Tab strip row, when a second tab reserves one.
+    pub tab_y: Option<u16>,
+}
+
 /// Application state driven by the event loop.
 pub struct App {
     /// Active document; inactive tabs live in `background`.
@@ -76,6 +93,12 @@ pub struct App {
     pub(crate) open_menu: Option<usize>,
     /// Highlighted item within the open dropdown menu.
     pub(crate) menu_item: usize,
+    /// Whether the sidebar is drawn; narrow terminals hide it regardless.
+    pub(crate) sidebar: bool,
+    /// Frame geometry from the last draw, for the mouse handler.
+    pub(crate) view: ViewRects,
+    /// Drag origin for mouse selection, cleared on release.
+    drag: Option<mouse::DragOrigin>,
     /// Resolved key bindings.
     pub keymap: Keymap,
     /// Transient status line content.
@@ -122,6 +145,9 @@ impl App {
             active: 0,
             open_menu: None,
             menu_item: 0,
+            sidebar: true,
+            view: ViewRects::default(),
+            drag: None,
             keymap: Keymap::load_user(),
             message: String::new(),
             should_quit: false,

@@ -14,9 +14,6 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::app::App;
 
-/// Longest title drawn for one tab before truncation.
-const TITLE_LIMIT: usize = 20;
-
 /// Draw the tab strip; the caller reserves the row only when the session
 /// holds more than one tab.
 pub(super) fn draw_tab_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -24,10 +21,7 @@ pub(super) fn draw_tab_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let mut spans = Vec::new();
     let mut used = 0usize;
     for i in 0..app.tab_count() {
-        let title = app.tab_title(i).unwrap_or_default();
-        let short: String = title.chars().take(TITLE_LIMIT).collect();
-        let divider = if i == 0 { "" } else { "│" };
-        let cell = format!("{divider} {short} ");
+        let cell = app.tab_cell(i).unwrap_or_default();
         if used + cell.width() + 4 > width {
             spans.push(Span::raw(format!(" +{}", app.tab_count() - i)));
             break;

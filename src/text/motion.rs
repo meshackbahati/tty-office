@@ -96,6 +96,21 @@ impl TextDocument {
         self.goal_col = self.cursor_display_col();
     }
 
+    /// Place the caret at `line` and display column `col` for mouse clicks,
+    /// clamping both to the buffer and clearing any selection.
+    pub fn click_at(&mut self, line: usize, col: usize) {
+        let line = line.min(self.line_count().saturating_sub(1));
+        let off = self.char_off_for_display_col(line, col);
+        let at = self.line_char_start(line) + off;
+        self.set_cursor(at, false);
+    }
+
+    /// Scroll the viewport by whole lines without moving the caret.
+    pub fn scroll_lines(&mut self, delta: i32) {
+        let max = self.line_count().saturating_sub(1) as i32;
+        self.rowoff = (self.rowoff as i32 + delta).clamp(0, max) as usize;
+    }
+
     pub(crate) fn apply_motion(&mut self, motion: Motion, extend: bool, view_h: usize) {
         match motion {
             Motion::Left => {

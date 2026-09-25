@@ -21,6 +21,10 @@ pub enum Action {
     Exit,
     /// Start a fresh untitled document.
     New,
+    /// Start a fresh untitled text file.
+    NewText,
+    /// Start a fresh untitled spreadsheet.
+    NewSheet,
     /// Prompt for a file to open in a new tab.
     Open,
     /// Activate the next tab, wrapping past the last one.
@@ -29,6 +33,8 @@ pub enum Action {
     PrevTab,
     /// Close the active tab; dirty tabs refuse, the last tab quits.
     CloseTab,
+    /// Show or hide the sidebar.
+    ToggleSidebar,
     /// Write out to the current path.
     Save,
     /// Prompt for a destination path and save there.
@@ -365,10 +371,13 @@ pub fn describe(action: &Action) -> String {
     match action {
         Action::Exit => "Exit (prompt if modified)".into(),
         Action::New => "New document".into(),
+        Action::NewText => "New text file".into(),
+        Action::NewSheet => "New spreadsheet".into(),
         Action::Open => "Open file".into(),
         Action::NextTab => "Next tab".into(),
         Action::PrevTab => "Previous tab".into(),
         Action::CloseTab => "Close tab".into(),
+        Action::ToggleSidebar => "Toggle sidebar".into(),
         Action::Save => "Save file".into(),
         Action::SaveAs => "Save as".into(),
         Action::ReadFile => "Insert file at cursor".into(),
@@ -403,10 +412,13 @@ fn action_from_name(name: &str) -> Option<Action> {
     Some(match name {
         "exit" => Exit,
         "new" => New,
+        "new_text" => NewText,
+        "new_sheet" => NewSheet,
         "open" => Open,
         "tab_next" => NextTab,
         "tab_prev" => PrevTab,
         "close_tab" => CloseTab,
+        "toggle_sidebar" => ToggleSidebar,
         "save" => Save,
         "save_as" => SaveAs,
         "read_file" => ReadFile,
