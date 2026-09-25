@@ -126,14 +126,13 @@ impl App {
 
     /// Wheel notch: scroll the view without moving the caret.
     fn mouse_wheel(&mut self, delta: i32) {
-        match self.doc.prose_surface() {
-            Some(surface) => surface.scroll_lines(delta),
-            None =>
-            {
-                #[cfg(feature = "xlsx")]
-                if let Document::Sheet(sheet) = &mut self.doc {
-                    sheet.scroll_rows(delta);
-                }
+        if let Some(surface) = self.doc.prose_surface() {
+            surface.scroll_lines(delta);
+        }
+        #[cfg(feature = "xlsx")]
+        if self.doc.prose_surface().is_none() {
+            if let Document::Sheet(sheet) = &mut self.doc {
+                sheet.scroll_rows(delta);
             }
         }
     }
