@@ -58,6 +58,14 @@ impl App {
                     self.message = "Save As cancelled".to_string();
                     return;
                 }
+                // Bare names gain the document extension, so `budget`
+                // saves as `budget.xlsx` for a spreadsheet rather than
+                // failing on the missing suffix.
+                let value = if Path::new(&value).extension().is_none() {
+                    format!("{value}.{}", self.doc.default_extension())
+                } else {
+                    value
+                };
                 self.do_save(Some(Path::new(&value)));
             }
             PromptKind::OpenFile => {

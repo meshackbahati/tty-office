@@ -59,6 +59,26 @@ impl Document {
         }
     }
 
+    /// Extension appended when Save As receives a bare file name, so
+    /// typing `budget` for a spreadsheet saves `budget.xlsx` the way
+    /// graphical suites behave instead of failing on a missing suffix.
+    pub fn default_extension(&self) -> &'static str {
+        match self {
+            Document::Text(_) => "txt",
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => match r.format() {
+                crate::RichFormat::Docx => "docx",
+                crate::RichFormat::Odt => "odt",
+            },
+            #[cfg(feature = "xlsx")]
+            Document::Sheet(s) => match s.format() {
+                crate::SheetFormat::Xlsx => "xlsx",
+                crate::SheetFormat::Ods => "ods",
+                crate::SheetFormat::Xls => "xlsx",
+            },
+        }
+    }
+
     /// Line-oriented prose surface shared by text and rich documents.
     ///
     /// Returns `None` when the variant is not a prose editor (for example a
@@ -282,9 +302,25 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
                 Ok(Document::Sheet(Box::new(s)))
             }
         }
-        other if other.is_empty() => Err(DocumentError::UnsupportedFormat(
-            "unknown extension".to_string(),
-        )),
-        other => Err(DocumentError::UnsupportedFormat(other.to_string())),
+        other => {
+            // Name what the suite opens so a failed attempt teaches the
+            // supported set instead of ending the investigation.
+            #[cfg(feature = "docx")]
+            let rich = ", docx, odt";
+            #[cfg(not(feature = "docx"))]
+            let rich = "";
+            #[cfg(feature = "xlsx")]
+            let sheet = ", xlsx, ods, xls, csv";
+            #[cfg(not(feature = "xlsx"))]
+            let sheet = "";
+            #[cfg(feature = "pdf")]
+            let pdf = ", pdf";
+            #[cfg(not(feature = "pdf"))]
+            let pdf = "";
+            let name = if other.is_empty() { "unknown" } else { other };
+            Err(DocumentError::UnsupportedFormat(format(
+                ".{name} cannot be opened (open txt, md{rich}{sheet}{pdf})"
+            )))
+        }
     }
 }
