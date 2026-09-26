@@ -17,18 +17,18 @@ their allocations.
 
 | Workload | Budget | Measured |
 |----------|--------|----------|
-| Mean frame, 10k-line document | under 16.6 ms | _see run_ |
-| Mean keystroke, 10k-line buffer | under 50 us | _see run_ |
-| Long-line insert sanity | under 2 ms | _recorded only_ |
+| Mean frame, 10k-line document | under 16.6 ms | 0.75 ms |
+| Mean keystroke, 10k-line buffer | under 50 us | 13 us |
+| Long-line insert sanity | under 2 ms | 0.08 ms |
 
 ## Memory budgets
 
 | Workload | Budget | Measured |
 |----------|--------|----------|
-| 100 MB text load, RSS delta | under 160 MB | _see run_ |
-| 100 MB text load, absolute RSS | under 320 MB | _see run_ |
-| 2k-row formula workbook open, RSS delta | under 150 MB | _see run_ |
-| 5 MB word document open, RSS delta | under 300 MB | _see run_ |
+| 100 MB text load, RSS delta | under 160 MB | 110 MB, 0.66 s |
+| 100 MB text load, absolute RSS | under 320 MB | 132 MB |
+| 2k-row formula workbook open, RSS delta | under 150 MB | 4.5 MB |
+| 5 MB word document open, RSS delta | under 300 MB | 242 MB |
 
 RSS deltas come from `/proc/self/status` around the open call, so
 they include the allocator and harness overhead of the test
