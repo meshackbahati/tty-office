@@ -303,6 +303,16 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
                 Ok(Document::Sheet(Box::new(s)))
             }
         }
+        #[cfg(feature = "pdf")]
+        "pdf" => {
+            if path.exists() {
+                view_pdf(path)
+            } else {
+                // A PDF cannot be written by typing, so a missing path
+                // starts untitled text that Save As will rename.
+                Ok(Document::Text(TextDocument::new()))
+            }
+        }
         other => {
             // Name what the suite opens so a failed attempt teaches the
             // supported set instead of ending the investigation.
@@ -324,4 +334,21 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
             )))
         }
     }
+}
+
+/// Open a PDF as extracted text for viewing. The buffer carries no path,
+/// so saving always passes through Save As instead of overwriting the
+/// PDF with plain text.
+#[cfg(feature = "pdf")]
+fn view_pdf(path: &Path) -> Result<Document, DocumentError> {
+    let doc = lopdf::Document::load(path).map_err(|err| DocumentError::Parse(err.to_string()))?;
+    let numbers: Vec<u32> = doc.get_pages().keys().copied().collect();
+    let text = doc
+        .extract_text(&numbers)
+        .map_err(|err| DocumentError::Parse(err.to_string()))?;
+    let mut t = TextDocument::new();
+    if !text.is_empty() {
+        t.insert_str(&text);
+    }
+    Ok(Document::Text(t))
 }

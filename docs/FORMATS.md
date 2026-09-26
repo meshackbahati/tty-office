@@ -16,10 +16,20 @@ code is correct and this file has fallen behind.
 | Excel workbook | `.xlsx` | yes | yes | `xlsx` | calamine plus umya-spreadsheet |
 | Excel legacy | `.xls` | yes | no | `xlsx` | calamine (read-only by design) |
 | OpenDocument sheet | `.ods` | yes | yes | `xlsx` | spreadsheet-ods |
+| Comma-separated values | `.csv` | yes | yes | `xlsx` | built-in parser; the grid is the sole storage |
+| Portable Document Format | `.pdf` | view as text | no | `pdf` | lopdf extraction |
 
 Documents with no extension open as plain text. A new file that does not
 yet exist on disk adopts the path implied by its extension and creates an
-empty document of the matching kind.
+empty document of the matching kind, except `.pdf`, which cannot be
+written by typing and starts untitled text that Save As will rename.
+
+CSV quoting follows the common rule: fields holding commas, quotes,
+or line breaks quote, and inner quotes double. Formulas travel as
+their `=` text and re-evaluate on open. PDF viewing extracts page
+text without layout; the buffer carries no path, so saving a viewed
+PDF always passes through Save As instead of overwriting the file
+with plain text.
 
 Round-trip fidelity follows one rule throughout: content the editor does
 not model is preserved rather than rewritten. Paragraphs of a rich

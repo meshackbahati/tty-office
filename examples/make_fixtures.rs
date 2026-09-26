@@ -9,7 +9,7 @@
 fn main() -> anyhow::Result<()> {
     use std::path::Path;
 
-    use tty_office::{open, Editor, Motion, SheetDocument};
+    use tty_office::{export, open, Editor, Motion, SheetDocument};
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     std::fs::create_dir_all(&root)?;
@@ -80,6 +80,13 @@ fn main() -> anyhow::Result<()> {
         doc.save(None)?;
     }
     println!("fixtures written to {}", root.display());
+    // A one-page PDF for the viewer, exported from the plain fixture.
+    #[cfg(feature = "pdf")]
+    {
+        let mut doc = open(&root.join("plain.txt"))?;
+        export(&mut doc, &root.join("sample.pdf"))?;
+        println!("sample.pdf written");
+    }
     Ok(())
 }
 
