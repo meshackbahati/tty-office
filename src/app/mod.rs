@@ -383,17 +383,30 @@ impl App {
     pub fn tick(&mut self) {
         #[cfg(feature = "proof")]
         {
-            let (rev, text) = match &self.doc {
-                Document::Text(t) => (Some(t.revision()), Some(t.text_projection())),
+            let rev = match &self.doc {
+                Document::Text(t) => Some(t.revision()),
                 #[cfg(feature = "docx")]
-                Document::Rich(r) => (Some(r.revision()), Some(r.text_projection())),
+                Document::Rich(r) => Some(r.revision()),
                 #[cfg(feature = "xlsx")]
-                Document::Sheet(_) => (None, None),
+                Document::Sheet(_) => None,
             };
-            if let (Some(engine), Some(rev), Some(text)) = (self.proof.as_mut(), rev, text) {
+            if let (Some(engine), Some(rev)) = (self.proof.as_mut(), rev) {
+                // Serializing the whole document is the most expensive
+                // main-thread work here, so it runs only when the
+                // revision changed; idle ticks on large documents stay
+                // free instead of stalling the interface.
                 if self.proof_rev != Some(rev) {
                     self.proof_rev = Some(rev);
-                    engine.schedule(&text);
+                    let text = match &self.doc {
+                        Document::Text(t) => Some(t.text_projection()),
+                        #[cfg(feature = "docx")]
+                        Document::Rich(r) => Some(r.text_projection()),
+                        #[cfg(feature = "xlsx")]
+                        Document::Sheet(_) => None,
+                    };
+                    if let Some(text) = text {
+                        engine.schedule(&text);
+                    }
                 }
                 engine.poll();
             }

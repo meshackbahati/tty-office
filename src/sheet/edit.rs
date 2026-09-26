@@ -279,11 +279,15 @@ pub(crate) fn scroll_offsets(
     if view_h == 0 || view_w == 0 {
         return;
     }
-    // One row is the column-letter header; one gutter is the row numbers.
-    let visible_rows = view_h.saturating_sub(super::COL_HEADER_H).max(1);
+    // One row is the column-letter header; every data row is followed by
+    // a separator line, and one gutter holds the row numbers.
+    let visible_rows = view_h
+        .saturating_sub(super::COL_HEADER_H)
+        .div_ceil(2)
+        .max(1);
     let visible_cols = view_w
         .saturating_sub(super::ROW_GUTTER)
-        .div_ceil(super::CELL_WIDTH)
+        .div_ceil(super::CELL_STRIDE)
         .max(1);
     if cursor.0 < *rowoff {
         *rowoff = cursor.0;

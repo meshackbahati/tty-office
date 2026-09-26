@@ -207,3 +207,36 @@ fn undo_restores_previous_cell_value() {
     assert!(doc.redo());
     assert_eq!(cell_display(as_sheet(&doc), 0, 0), "b");
 }
+
+#[test]
+fn typed_text_echoes_inside_the_cursor_cell() {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    use tty_office::{draw, PromptKind};
+
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("echo.xlsx");
+    let mut app = App::new(open_sheet(&path));
+    app.handle_key(enter());
+    assert_eq!(app.mode, Mode::Prompt(PromptKind::CellEdit));
+    for c in "hi".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    let backend = TestBackend::new(60, 10);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    let buffer = term.backend().buffer();
+    let area = *buffer.area();
+    let mut text = String::new();
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            text.push_str(buffer[(x, y)].symbol());
+        }
+        text.push('\n');
+    }
+    // The grid draws its cell borders and joints; the typed text carries
+    // the cell border prefix, which the prompt line below never has.
+    assert!(text.contains('│'), "grid borders missing: {text}");
+    assert!(text.contains('┼'), "grid joints missing: {text}");
+    assert!(text.contains("│hi"), "cell echo missing: {text}");
+}

@@ -24,6 +24,8 @@ const HISTORY_CAP: usize = 1000;
 const PAGE_ROWS: usize = 40;
 /// Display width of one grid column, used for horizontal scroll maths.
 pub(crate) const CELL_WIDTH: usize = 12;
+/// Display width of one grid column including its left border line.
+pub(crate) const CELL_STRIDE: usize = CELL_WIDTH + 1;
 /// Width of the row-number gutter in the grid pane.
 pub(crate) const ROW_GUTTER: usize = 6;
 /// Height of the column-letter header row in the grid pane.

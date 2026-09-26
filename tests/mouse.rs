@@ -135,10 +135,11 @@ fn sheet_click_and_drag_select_cells() {
     let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
     let mut app = App::new(doc);
     drawn(&mut app);
-    // Row 1 is the column-letter header, so row 3 is grid row 0 and
-    // column 28 is grid column 0 past the sidebar and the gutter.
-    app.handle_mouse(down(28, 3));
-    app.handle_mouse(drag_to(40, 4));
+    // Row 1 is the column-letter header with its rule on row 2, so row
+    // 3 is grid row 0; column 29 is grid column 0 past the sidebar, the
+    // gutter, and the first border line.
+    app.handle_mouse(down(29, 3));
+    app.handle_mouse(drag_to(42, 5));
     let rect = match &app.doc {
         Document::Sheet(sheet) => sheet.selection_rect(),
         _ => None,

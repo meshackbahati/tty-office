@@ -9,7 +9,7 @@ use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::UnicodeWidthStr;
 
 #[cfg(feature = "xlsx")]
-use crate::sheet::{CELL_WIDTH, ROW_GUTTER};
+use crate::sheet::{CELL_STRIDE, ROW_GUTTER};
 use crate::Document;
 
 use super::menu::{dropdown, hit_item, hit_label, items};
@@ -232,17 +232,19 @@ impl App {
     }
 
     /// Grid cell for a press at absolute `(x, y)`, when the cell maps
-    /// into the data area below the column-letter header.
+    /// into the data area below the column-letter header. Border and
+    /// rule rows select nothing rather than a neighbour cell.
     #[cfg(feature = "xlsx")]
     fn sheet_cell_at(&mut self, x: u16, y: u16) -> Option<(usize, usize)> {
         let view = self.view;
-        if y <= view.text_y {
+        if y < view.text_y {
             return None;
         }
-        let r = (y - view.text_y - 1) as usize;
-        let content_rows = (view.text_h as usize).saturating_sub(1);
-        // Row 0 is the column-letter header; data starts one below it.
-        if r == 0 || r > content_rows {
+        // Row 0 is the column-letter header and row 1 its rule; data
+        // rows pair with a rule below, so odd rows past the header are
+        // rules as well.
+        let r = (y - view.text_y) as usize;
+        if r < 2 || (r % 2) == 1 {
             return None;
         }
         let (rowoff, coloff) = match &self.doc {
@@ -252,8 +254,11 @@ impl App {
         if x < view.text_x + ROW_GUTTER as u16 {
             return None;
         }
-        let col = coloff + ((x - view.text_x - ROW_GUTTER as u16) as usize) / CELL_WIDTH;
-        Some((rowoff + (r - 1), col))
+        let rel = (x - view.text_x - ROW_GUTTER as u16) as usize;
+        if rel.is_multiple_of(CELL_STRIDE) {
+            return None;
+        }
+        Some((rowoff + (r - 2) / 2, coloff + rel / CELL_STRIDE))
     }
 
     /// Press on a sheet: place the cell caret and remember the origin.

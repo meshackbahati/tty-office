@@ -178,16 +178,18 @@ fn sheet_grid_renders_headers_and_cells() {
         sheet.set_cell_content("north");
     }
     let mut app = App::new(doc);
-    let backend = TestBackend::new(50, 8);
+    // Tall enough for the header, its rule, and two data rows with theirs.
+    let backend = TestBackend::new(50, 12);
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     let text = buffer_text(&mut term);
     assert!(text.contains("region"), "cell missing: {text}");
     assert!(text.contains("q1"), "cell missing: {text}");
     assert!(text.contains("north"), "cell missing: {text}");
-    // Column-letter header plus the one-based number for the first row.
+    // Column-letter header plus the one-based number for the first row,
+    // now followed by the grid border.
     assert!(text.contains('A'), "column header missing: {text}");
-    assert!(text.contains("    1 "), "row number missing: {text}");
+    assert!(text.contains("    1 │"), "row number missing: {text}");
 }
 
 #[test]
