@@ -13,7 +13,7 @@ use super::cell::{Cell, SheetFormat};
 use super::edit::{
     a1_ref, move_grid, project_tsv, scroll_offsets, select_all_cells, used_range, SheetEdit,
 };
-use super::formula::{new_mirror, push_grid_to_mirror, reevaluate_formulas};
+use super::formula::{new_mirror, push_grid_to_mirror, reevaluate_all};
 use super::package::{
     load_package, new_package, package_matches, sync_grid_into_package, write_package, Package,
 };
@@ -104,7 +104,7 @@ impl SheetDocument {
             redo: Vec::new(),
             mirror,
         };
-        reevaluate_formulas(&mut doc.mirror, &mut doc.cells);
+        reevaluate_all(&mut doc.mirror, &mut doc.cells);
         Ok(doc)
     }
 

@@ -6,6 +6,7 @@
 //! dialect happens only at save time.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use super::cell::{Cell, CellValue};
 
@@ -62,17 +63,84 @@ pub(crate) fn sync_cell_to_mirror(
     }
 }
 
-/// Re-evaluate every formula cell and cache the result in the grid.
-pub(crate) fn reevaluate_formulas(
+/// Re-evaluate every formula cell, used after a fresh load or mirror
+/// rebuild where everything is new.
+pub(crate) fn reevaluate_all(
     mirror: &mut formualizer::Workbook,
     cells: &mut HashMap<(usize, usize), Cell>,
 ) {
-    let formula_cells: Vec<(usize, usize)> = cells
+    let all: Vec<(usize, usize)> = cells
         .iter()
         .filter(|(_, c)| c.formula.is_some())
         .map(|(&k, _)| k)
         .collect();
-    for (row, col) in formula_cells {
+    reevaluate_formulas(mirror, cells, &all);
+}
+
+/// Re-evaluate the formulas affected by edits to `changed` cells: the
+/// changed formulas themselves plus their transitive dependents. A full
+/// pass costs linear time per edit, which stalls typing on formula-heavy
+/// sheets, while the affected set is usually a handful of cells. The
+/// engine resolves references from the mirror, so evaluation order
+/// within the set does not matter.
+pub(crate) fn reevaluate_formulas(
+    mirror: &mut formualizer::Workbook,
+    cells: &mut HashMap<(usize, usize), Cell>,
+    changed: &[(usize, usize)],
+) {
+    // The precedent map rebuilds per call so it can never drift from the
+    // grid; scanning a few thousand formula texts costs microseconds
+    // against the millisecond scale of evaluation itself.
+    let mut precedents: HashMap<(usize, usize), Vec<(usize, usize)>> = HashMap::new();
+    let mut full = false;
+    for (&at, cell) in cells.iter() {
+        if let Some(formula) = &cell.formula {
+            match formula_precedents(formula) {
+                Some(deps) => {
+                    precedents.insert(at, deps);
+                }
+                None => {
+                    full = true;
+                    break;
+                }
+            }
+        }
+    }
+    let targets: Vec<(usize, usize)> = if full {
+        cells
+            .iter()
+            .filter(|(_, c)| c.formula.is_some())
+            .map(|(&k, _)| k)
+            .collect()
+    } else {
+        let mut dependents: HashMap<(usize, usize), Vec<(usize, usize)>> = HashMap::new();
+        for (f, deps) in &precedents {
+            for d in deps {
+                dependents.entry(*d).or_default().push(*f);
+            }
+        }
+        let mut done: HashSet<(usize, usize)> = HashSet::new();
+        let mut targets = Vec::new();
+        let mut queue: Vec<(usize, usize)> = changed.to_vec();
+        // Changed cells holding formulas evaluate first: their text is new.
+        for c in changed {
+            if precedents.contains_key(c) && done.insert(*c) {
+                targets.push(*c);
+            }
+        }
+        while let Some(cur) = queue.pop() {
+            if let Some(nexts) = dependents.get(&cur) {
+                for n in nexts {
+                    if done.insert(*n) {
+                        targets.push(*n);
+                        queue.push(*n);
+                    }
+                }
+            }
+        }
+        targets
+    };
+    for (row, col) in targets {
         let result = mirror.evaluate_cell(MIRROR_SHEET, row as u32 + 1, col as u32 + 1);
         if let Some(cell) = cells.get_mut(&(row, col)) {
             match result {
@@ -81,6 +149,145 @@ pub(crate) fn reevaluate_formulas(
             }
         }
     }
+}
+
+/// Parse one `A1` reference into zero-based `(col, row)`, accepting
+/// absolute markers. Returns `None` for anything that is not a plain
+/// cell reference.
+fn parse_a1(word: &str) -> Option<(usize, usize)> {
+    let clean: String = word.chars().filter(|&c| c != '$').collect();
+    let split = clean
+        .char_indices()
+        .find(|(_, c)| c.is_ascii_digit())
+        .map(|(i, _)| i)?;
+    let (letters, digits) = clean.split_at(split);
+    if letters.is_empty() || letters.len() > 3 || digits.is_empty() || digits.len() > 7 {
+        return None;
+    }
+    if !letters.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    if !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let mut col = 0usize;
+    for c in letters.chars() {
+        col = col * 26 + (c.to_ascii_uppercase() as usize - 'A' as usize) + 1;
+    }
+    let row: usize = digits.parse().ok()?;
+    Some((col - 1, row - 1))
+}
+
+/// Cells a canonical formula reads, for dependent-only recalculation.
+/// Returns `None` when the text defeats the scanner (structured
+/// references, defined names, foreign sheets in ranges); the caller
+/// then falls back to a full pass, so doubt costs time but never
+/// correctness through a missed edge.
+fn formula_precedents(formula: &str) -> Option<Vec<(usize, usize)>> {
+    /// Ranges above this cell count fall back to a full pass rather
+    /// than expanding whole columns into the dependent map.
+    const RANGE_CAP: usize = 4096;
+    let body = formula.strip_prefix('=').unwrap_or(formula);
+    let chars: Vec<char> = body.chars().collect();
+    let mut deps = Vec::new();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '"' {
+            i += 1;
+            while i < chars.len() && chars[i] != '"' {
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if ch == '\'' {
+            // Quoted sheet name: only the local sheet keeps its
+            // following reference live; anything else is static.
+            i += 1;
+            let start = i;
+            while i < chars.len() && chars[i] != '\'' {
+                i += 1;
+            }
+            let name: String = chars[start..i].iter().collect();
+            i += 1;
+            if chars.get(i) != Some(&'!') {
+                return None;
+            }
+            i += 1;
+            if name.eq_ignore_ascii_case(MIRROR_SHEET) {
+                continue;
+            }
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '$') {
+                i += 1;
+            }
+            continue;
+        }
+        if ch.is_ascii_alphabetic() || ch == '$' {
+            // Identifiers glued to a preceding digit are scientific
+            // notation like 1E5, not references.
+            let follows_number = i > 0 && (chars[i - 1].is_ascii_digit() || chars[i - 1] == '.');
+            let start = i;
+            while i < chars.len()
+                && (chars[i].is_ascii_alphanumeric() || matches!(chars[i], '.' | '$' | '_'))
+            {
+                i += 1;
+            }
+            if follows_number {
+                continue;
+            }
+            let word: String = chars[start..i].iter().collect();
+            if chars.get(i) == Some(&'!') {
+                // Sheet-qualified reference: the local sheet keeps its
+                // reference live, foreign sheets never change through
+                // this grid, and anything unparseable bails out.
+                if !word.eq_ignore_ascii_case(MIRROR_SHEET) {
+                    i += 1;
+                    while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '$') {
+                        i += 1;
+                    }
+                    continue;
+                }
+                i += 1;
+                continue;
+            }
+            if chars.get(i) == Some(&'(') {
+                continue;
+            }
+            if word == "TRUE" || word == "FALSE" {
+                continue;
+            }
+            let (col, row) = parse_a1(&word)?;
+            deps.push((row, col));
+            if chars.get(i) == Some(&':') {
+                i += 1;
+                let second = i;
+                while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '$') {
+                    i += 1;
+                }
+                let word2: String = chars[second..i].iter().collect();
+                let (col2, row2) = parse_a1(&word2)?;
+                let (r0, r1) = (row.min(row2), row.max(row2));
+                let (c0, c1) = (col.min(col2), col.max(col2));
+                if (r1 - r0 + 1) * (c1 - c0 + 1) > RANGE_CAP {
+                    return None;
+                }
+                for r in r0..=r1 {
+                    for c in c0..=c1 {
+                        if (r, c) != (row, col) {
+                            deps.push((r, c));
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if matches!(ch, '[' | ']' | '{' | '}') {
+            return None;
+        }
+        i += 1;
+    }
+    Some(deps)
 }
 
 /// Convert an ODS formula (`of:=[.A1]+1`) to Excel canonical (`=A1+1`).
@@ -272,5 +479,52 @@ mod tests {
         let original = "=SUM(A1:B2,C3)*1.5";
         let ods = excel_formula_to_ods(original);
         assert_eq!(ods_formula_to_excel(&ods), original);
+    }
+
+    #[test]
+    fn precedents_cover_refs_ranges_and_absolutes() {
+        assert_eq!(formula_precedents("=A1"), Some(vec![(0, 0)]));
+        assert_eq!(formula_precedents("=$B$2"), Some(vec![(1, 1)]));
+        assert_eq!(
+            formula_precedents("=SUM(A1:A3)"),
+            Some(vec![(0, 0), (1, 0), (2, 0)])
+        );
+        assert_eq!(formula_precedents("=A1+B2"), Some(vec![(0, 0), (1, 1)]));
+    }
+
+    #[test]
+    fn precedents_skip_strings_functions_and_foreign_sheets() {
+        assert_eq!(
+            formula_precedents("=IF(A1>5,\"A9\",\"small\")"),
+            Some(vec![(0, 0)])
+        );
+        assert_eq!(formula_precedents("=1E5+A1"), Some(vec![(0, 0)]));
+        assert_eq!(formula_precedents("=Other!A1+A2"), Some(vec![(1, 0)]));
+        assert_eq!(formula_precedents("=TRUE"), Some(vec![]));
+    }
+
+    #[test]
+    fn precedents_bail_to_full_on_exotic_forms() {
+        assert_eq!(formula_precedents("=MyName+1"), None);
+        assert_eq!(formula_precedents("=SUM(A:A)"), None);
+        assert_eq!(formula_precedents("=Table1[Col]+1"), None);
+    }
+
+    #[test]
+    fn recalc_propagates_through_chains() {
+        let mut mirror = new_mirror();
+        let mut cells: HashMap<(usize, usize), Cell> = HashMap::new();
+        cells.insert((0, 0), Cell::from_value(CellValue::Number(1.0)));
+        cells.insert((0, 1), Cell::from_formula("=A1*2".to_string(), None));
+        cells.insert((0, 2), Cell::from_formula("=B1*2".to_string(), None));
+        push_grid_to_mirror(&mut mirror, &cells);
+        reevaluate_all(&mut mirror, &mut cells);
+        assert_eq!(cells[&(0, 2)].value.display(), "4");
+
+        cells.insert((0, 0), Cell::from_value(CellValue::Number(5.0)));
+        sync_cell_to_mirror(&mut mirror, 0, 0, cells.get(&(0, 0)));
+        reevaluate_formulas(&mut mirror, &mut cells, &[(0, 0)]);
+        assert_eq!(cells[&(0, 1)].value.display(), "10");
+        assert_eq!(cells[&(0, 2)].value.display(), "20");
     }
 }

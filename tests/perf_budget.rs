@@ -1,11 +1,13 @@
 //! Phase 7 performance budgets from DEVELOPMENT_PLAN, run explicitly in
 //! release mode with:
 //!
-//! `cargo test --release --test perf_budget -- --ignored --nocapture`
+//! `cargo test --release --test perf_budget -- --ignored --nocapture --test-threads=1`
 //!
 //! The tests are ignored by default because the budgets are claims about
 //! the optimized build, and because the hundred-megabyte load would
-//! otherwise run on every development cycle.
+//! otherwise run on every development cycle. The single thread matters:
+//! resident measurements read process-wide RSS, so parallel tests would
+//! charge each other for their allocations.
 
 #![cfg(target_os = "linux")]
 
@@ -138,5 +140,86 @@ fn render_stays_sub_frame_on_10k_lines() {
     assert!(
         mean < 16.6,
         "mean frame {mean:.3} ms exceeds the 16.6 ms sub-frame budget"
+    );
+}
+
+/// A two-thousand-row formula workbook must open with resident growth
+/// proportional to the package and the evaluation mirror, not to any
+/// per-keystroke structure, since recalculation is per edit.
+#[test]
+#[ignore]
+#[cfg(feature = "xlsx")]
+fn formula_sheet_memory_stays_proportional() {
+    use tempfile::TempDir;
+    use tty_office::{SheetDocument, SheetFormat};
+
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("formulas.xlsx");
+    {
+        let mut sheet = SheetDocument::new(SheetFormat::Xlsx);
+        for r in 0..2000usize {
+            sheet.move_cursor(Motion::BufferStart, false);
+            for _ in 0..r {
+                sheet.move_cursor(Motion::Down, false);
+            }
+            sheet.set_cell_content("7");
+            sheet.move_cursor(Motion::Right, false);
+            sheet.set_cell_content("=A1*2");
+        }
+        let mut doc = Document::Sheet(Box::new(sheet));
+        doc.save_as(&path).expect("save workbook");
+    }
+
+    let before_kb = rss_kb();
+    let doc = tty_office::open(&path).expect("open workbook");
+    let after_kb = rss_kb();
+    let delta_mb = (after_kb.saturating_sub(before_kb)) as f64 / 1024.0;
+    println!(
+        "formula sheet: rss before {} MB, after {} MB, delta {:.1} MB",
+        before_kb / 1024,
+        after_kb / 1024,
+        delta_mb
+    );
+    drop(doc);
+    assert!(
+        delta_mb < 150.0,
+        "workbook open added {delta_mb:.1} MB RSS, budget is 150 MB"
+    );
+}
+
+/// A five-megabyte word document must open inside a generous resident
+/// budget covering the package DOM, the rope, and the proof handoff.
+#[test]
+#[ignore]
+#[cfg(feature = "docx")]
+fn large_docx_opens_within_budget() {
+    use tempfile::TempDir;
+    use tty_office::{RichDocument, RichFormat};
+
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("large.docx");
+    {
+        let body = "A sentence of manuscript prose for the memory budget.\n".repeat(100_000);
+        let mut doc = Document::Rich(Box::new(RichDocument::new(RichFormat::Docx)));
+        doc.insert_str(&body);
+        doc.save_as(&path).expect("save document");
+    }
+
+    let before_kb = rss_kb();
+    let doc = tty_office::open(&path).expect("open document");
+    let after_kb = rss_kb();
+    let delta_mb = (after_kb.saturating_sub(before_kb)) as f64 / 1024.0;
+    println!(
+        "docx open: rss before {} MB, after {} MB, delta {:.1} MB",
+        before_kb / 1024,
+        after_kb / 1024,
+        delta_mb
+    );
+    drop(doc);
+    // The package DOM for a hundred thousand paragraphs is heavy; the
+    // budget trips only on growth far beyond the measured quarter gig.
+    assert!(
+        delta_mb < 300.0,
+        "document open added {delta_mb:.1} MB RSS, budget is 300 MB"
     );
 }

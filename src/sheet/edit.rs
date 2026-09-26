@@ -8,7 +8,9 @@ use std::collections::HashMap;
 
 use super::cell::{col_letters, parse_cell_input, Cell, SheetFormat};
 use super::document::SheetDocument;
-use super::formula::{push_grid_to_mirror, reevaluate_formulas, sync_cell_to_mirror};
+use super::formula::{
+    push_grid_to_mirror, reevaluate_all, reevaluate_formulas, sync_cell_to_mirror,
+};
 use super::PAGE_ROWS;
 
 /// One reversible cell replacement.
@@ -56,7 +58,7 @@ impl SheetDocument {
         }]);
         self.dirty = true;
         sync_cell_to_mirror(&mut self.mirror, row, col, after.as_ref());
-        reevaluate_formulas(&mut self.mirror, &mut self.cells);
+        reevaluate_formulas(&mut self.mirror, &mut self.cells, &[(row, col)]);
     }
 
     /// Clear the cell under the cursor (or every cell in the selection) as a
@@ -103,9 +105,10 @@ impl SheetDocument {
         if unit.is_empty() {
             return;
         }
+        let cleared: Vec<(usize, usize)> = unit.iter().map(|e| (e.row, e.col)).collect();
         self.push_unit(unit);
         self.dirty = true;
-        reevaluate_formulas(&mut self.mirror, &mut self.cells);
+        reevaluate_formulas(&mut self.mirror, &mut self.cells, &cleared);
     }
 
     /// Append `c` to the cell under the cursor as one undo unit. The UI
@@ -152,13 +155,14 @@ impl SheetDocument {
             sync_cell_to_mirror(&mut self.mirror, edit.row, edit.col, cell.as_ref());
         }
         self.dirty = true;
-        reevaluate_formulas(&mut self.mirror, &mut self.cells);
+        let touched: Vec<(usize, usize)> = unit.iter().map(|e| (e.row, e.col)).collect();
+        reevaluate_formulas(&mut self.mirror, &mut self.cells, &touched);
     }
 
     pub(crate) fn rebuild_mirror(&mut self) {
         self.mirror = super::formula::new_mirror();
         push_grid_to_mirror(&mut self.mirror, &self.cells);
-        reevaluate_formulas(&mut self.mirror, &mut self.cells);
+        reevaluate_all(&mut self.mirror, &mut self.cells);
     }
 }
 

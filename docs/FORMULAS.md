@@ -32,6 +32,16 @@ Unknown functions, division by zero, and circular references all
 terminate as cell error values; none of them hangs or panics. The
 circular-reference test exists precisely to prove termination.
 
+## Recalculation scope
+
+Each edit re-evaluates only the formulas that transitively depend
+on the touched cells, found by scanning references out of the
+formula text. Anything the scanner cannot analyze (structured
+references, defined names, whole-column ranges) falls back to a
+full pass, so doubt costs time but never correctness through a
+missed edge. Typing on a formula-heavy sheet therefore stays
+responsive instead of re-running the whole workbook per keystroke.
+
 ## Limits
 
 References resolve within the open sheet only. Cross-sheet
