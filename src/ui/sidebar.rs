@@ -5,7 +5,7 @@
 //! of spilling onto the status bar.
 
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
@@ -16,6 +16,7 @@ use crate::app::App;
 
 /// Draw the sidebar into its reserved column with a right hairline.
 pub(super) fn draw_sidebar(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let theme = app.theme();
     let width = area.width as usize;
     let lines: Vec<Line<'static>> = rows(app)
         .into_iter()
@@ -26,7 +27,7 @@ pub(super) fn draw_sidebar(frame: &mut Frame<'_>, app: &App, area: Rect) {
                 text.pop();
             }
             let style = match row.kind {
-                RowKind::Header => Style::default().fg(Color::DarkGray),
+                RowKind::Header => Style::default().fg(theme.dim),
                 RowKind::Tab(i) if i == app.active_tab() => {
                     Style::default().add_modifier(Modifier::REVERSED)
                 }
@@ -37,6 +38,6 @@ pub(super) fn draw_sidebar(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .collect();
     let block = Block::default()
         .borders(Borders::RIGHT)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(theme.dim));
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }

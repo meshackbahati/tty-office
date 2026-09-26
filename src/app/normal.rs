@@ -95,6 +95,11 @@ impl App {
             Action::ZoomReset => {
                 self.zoom = 0;
             }
+            Action::CycleTheme => {
+                self.theme = self.theme.next();
+                let name = self.theme.name;
+                self.message = format!("Theme: {name}");
+            }
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
                 let name = self.doc.display_name();

@@ -5,7 +5,7 @@
 //! caret's page is visible at a glance while editing.
 
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
@@ -13,9 +13,8 @@ use ratatui::Frame;
 use crate::app::{App, Mode};
 use crate::editor::Editor;
 
-use super::ACCENT;
-
 pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
+    let theme = app.theme();
     let name = app.doc.display_name();
     let dirty = if app.doc.is_dirty() { " [+]" } else { "" };
     let layout = app.page_layout();
@@ -35,7 +34,9 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                 let left = Line::from(vec![
                     Span::styled(
                         format!(" {name}{dirty}"),
-                        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme.accent)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" │ "),
                     Span::raw(format!("Cell {ref_str}")),
@@ -46,7 +47,7 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                     Mode::Prompt(_) => "PROMPT",
                     Mode::Normal => "EDIT",
                 };
-                render_status_bar(frame, area, left, mode);
+                render_status_bar(frame, area, left, mode, theme);
                 return;
             }
             (1, 1, 0, 1, 1)
@@ -63,7 +64,9 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         let mut spans = vec![
             Span::styled(
                 format!(" {name}{dirty}"),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" │ "),
             Span::raw(format!("Ln {line}, Col {col}")),
@@ -87,7 +90,7 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         spans
     };
     let left = Line::from(left_spans);
-    render_status_bar(frame, area, left, mode);
+    render_status_bar(frame, area, left, mode, theme);
 }
 
 pub(super) fn render_status_bar(
@@ -95,12 +98,13 @@ pub(super) fn render_status_bar(
     area: Rect,
     left: Line<'static>,
     mode: &str,
+    theme: crate::Theme,
 ) {
     let right = Line::from(Span::styled(
         format!("{mode} "),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.dim),
     ));
-    let bar = Paragraph::new(left).style(Style::default().bg(Color::Black));
+    let bar = Paragraph::new(left).style(Style::default().bg(theme.status_bg));
     frame.render_widget(bar, area);
     let right_width = right.width() as u16;
     if area.width > right_width {
@@ -112,7 +116,7 @@ pub(super) fn render_status_bar(
             height: 1,
         };
         frame.render_widget(
-            Paragraph::new(right).style(Style::default().bg(Color::Black)),
+            Paragraph::new(right).style(Style::default().bg(theme.status_bg)),
             right_area,
         );
     }

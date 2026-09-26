@@ -23,20 +23,18 @@ use unicode_width::UnicodeWidthChar;
 use crate::app::sidebar::{MIN_WIDTH_FOR_SIDEBAR, SIDEBAR_WIDTH};
 use crate::app::{App, Mode, ViewRects};
 use crate::page::PageLayout;
+use crate::Theme;
 
-/// Accent used for the filename and active hints.
-const ACCENT: Color = Color::Cyan;
-/// Style for selected ranges: reverse video for contrast without adding a
-/// second palette color.
+/// Style for selected ranges: reverse video for contrast without adding
+/// a palette color, so every theme keeps readable selections.
 fn selected_style() -> Style {
     Style::default().add_modifier(Modifier::REVERSED)
 }
 
-/// Style for misspelled words: red plus underline, one accent beyond the
-/// monochrome baseline so errors are visible without a second hue for layout.
-fn misspelled_style() -> Style {
+/// Style for misspelled words: the theme error color plus underline.
+fn misspelled_style(error: Color) -> Style {
     Style::default()
-        .fg(Color::Red)
+        .fg(error)
         .add_modifier(Modifier::UNDERLINED)
 }
 
@@ -44,6 +42,7 @@ fn misspelled_style() -> Style {
 struct LineDecor<'a> {
     selection: Option<(usize, usize)>,
     misspelled: &'a [(usize, usize)],
+    theme: Theme,
 }
 
 /// Draw one frame.
@@ -147,9 +146,11 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let misspelled: Vec<(usize, usize)> = app.misspelled_ranges().to_vec();
     #[cfg(not(feature = "proof"))]
     let misspelled: Vec<(usize, usize)> = Vec::new();
+    let theme = app.theme();
     let decor = LineDecor {
         selection,
         misspelled: &misspelled,
+        theme,
     };
     let height = area.height as usize;
     let width = area.width as usize;
@@ -177,12 +178,12 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let mut rule_drawn = false;
     while lines.len() < height {
         if !rule_drawn && cur < line_count && cur > rowoff && layout.is_page_start(cur) {
-            lines.push(page_rule(&layout, cur, width));
+            lines.push(page_rule(&layout, cur, width, theme));
             rule_drawn = true;
             continue;
         }
         if cur >= line_count {
-            lines.push(blank_frame(width));
+            lines.push(blank_frame(width, theme));
             continue;
         }
         let Some((raw, line_start)) = (|| {
@@ -204,12 +205,13 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                 cursor_col,
             ),
             content_w,
+            theme,
         ));
         for _ in 1..step {
             if lines.len() >= height {
                 break;
             }
-            lines.push(blank_frame(width));
+            lines.push(blank_frame(width, theme));
         }
         cur += 1;
         rule_drawn = false;
@@ -218,7 +220,7 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let paragraph = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(theme.dim)),
     );
     frame.render_widget(paragraph, area);
 
@@ -244,31 +246,33 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
 
 /// Hairline rule marking the boundary above `line`, carrying its page number.
 /// The joints tie into the page side borders drawn around text rows.
-fn page_rule(layout: &PageLayout, line: usize, width: usize) -> Line<'static> {
+fn page_rule(layout: &PageLayout, line: usize, width: usize, theme: Theme) -> Line<'static> {
     let label = format!(" page {} ", layout.page_of(line));
     let inner = width.saturating_sub(2);
     let fill = inner.saturating_sub(label.chars().count());
     let left = fill / 2;
     let right = fill - left;
     let text = format!("├{}{}{}┤", "─".repeat(left), label, "─".repeat(right));
-    Line::styled(text, Style::default().fg(Color::DarkGray))
+    Line::styled(text, Style::default().fg(theme.dim))
 }
 
 /// Wrap a rendered text line in the page side borders, padding short
 /// lines so the right border always lands on the pane edge.
-fn frame_line<'a>(mut line: Line<'a>, content_w: usize) -> Line<'a> {
+fn frame_line<'a>(mut line: Line<'a>, content_w: usize, theme: Theme) -> Line<'a> {
     let pad = content_w.saturating_sub(line.width());
+    let side = Style::default().fg(theme.dim);
     let mut spans = Vec::with_capacity(line.spans.len() + 2);
-    spans.push(Span::raw("│"));
+    spans.push(Span::styled("│", side));
     spans.append(&mut line.spans);
-    spans.push(Span::raw(format!("{}│", " ".repeat(pad))));
+    spans.push(Span::styled(format!("{}│", " ".repeat(pad)), side));
     Line::from(spans)
 }
 
 /// Blank framed row for viewport space past the document end and for
 /// the blank rows zoom levels insert between lines.
-fn blank_frame(width: usize) -> Line<'static> {
-    Line::from(format!("│{}│", " ".repeat(width.saturating_sub(2))))
+fn blank_frame(width: usize, theme: Theme) -> Line<'static> {
+    let text = format!("│{}│", " ".repeat(width.saturating_sub(2)));
+    Line::styled(text, Style::default().fg(theme.dim))
 }
 
 fn render_line<'a>(
@@ -291,7 +295,7 @@ fn render_line<'a>(
         if selected {
             selected_style()
         } else if decor.misspelled.iter().any(|&(a, b)| idx >= a && idx < b) {
-            misspelled_style()
+            misspelled_style(decor.theme.error)
         } else {
             Style::default()
         }
@@ -354,20 +358,22 @@ fn render_line<'a>(
 }
 
 fn draw_message(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let theme = app.theme();
     let content = if let Some(p) = app.prompt_display() {
-        Span::styled(format!(" {p}"), Style::default().fg(ACCENT))
+        Span::styled(format!(" {p}"), Style::default().fg(theme.accent))
     } else if !app.message.is_empty() {
         Span::raw(format!(" {}", app.message))
     } else {
         Span::styled(
             " Ctrl+G help · Ctrl+S save · Ctrl+X exit",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.dim),
         )
     };
     frame.render_widget(Paragraph::new(Line::from(content)), area);
 }
 
 fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let theme = app.theme();
     let inner_h = area.height.saturating_sub(2) as usize;
     // The help body is the packaged KEYMAP document so prose and bindings
     // stay in one place rather than diverging from the keymap table.
@@ -385,13 +391,15 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
             if line.starts_with("# ") {
                 return Line::styled(
                     line.trim_start_matches("# ").to_string(),
-                    Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
                 );
             }
             if line.starts_with("## ") {
                 return Line::styled(
                     line.trim_start_matches("## ").to_string(),
-                    Style::default().fg(ACCENT),
+                    Style::default().fg(theme.accent),
                 );
             }
             Line::from(line.to_string())
@@ -400,7 +408,7 @@ fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Help — Esc or Ctrl+G to close ")
-        .border_style(Style::default().fg(ACCENT));
+        .border_style(Style::default().fg(theme.accent));
     let para = Paragraph::new(lines)
         .block(block)
         .wrap(ratatui::widgets::Wrap { trim: false });

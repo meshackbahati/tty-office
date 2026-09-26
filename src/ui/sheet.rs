@@ -6,7 +6,7 @@
 //! and the mouse handler share the stride this layout defines.
 
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
@@ -19,6 +19,7 @@ use super::selected_style;
 pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     use crate::sheet::{CELL_STRIDE, CELL_WIDTH, COL_HEADER_H, ROW_GUTTER};
 
+    let theme = app.theme();
     let (height, width) = (area.height as usize, area.width as usize);
     if height < COL_HEADER_H + 1 || width <= ROW_GUTTER {
         frame.render_widget(Paragraph::new(""), area);
@@ -92,14 +93,14 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             header.push_str(&label[..CELL_WIDTH.min(label.len())]);
         }
         lines.push(Line::from(header));
-        lines.push(grid_separator(visible_cols));
+        lines.push(grid_separator(visible_cols, theme));
     }
 
     for (i, row_vals) in rows.iter().enumerate() {
         let r = rowoff + i;
         let mut spans: Vec<Span<'static>> = Vec::new();
         let row_num = format!("{:>5} ", r + 1);
-        spans.push(Span::styled(row_num, Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(row_num, Style::default().fg(theme.dim)));
         for (j, val) in row_vals.iter().enumerate() {
             let c = coloff + j;
             let selected = selection
@@ -118,24 +119,24 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             spans.push(Span::styled(text, style));
         }
         lines.push(Line::from(spans));
-        lines.push(grid_separator(visible_cols));
+        lines.push(grid_separator(visible_cols, theme));
     }
 
     let paragraph = Paragraph::new(lines).block(
         Block::default()
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(theme.dim)),
     );
     frame.render_widget(paragraph, area);
 }
 
 /// Horizontal grid rule: gutter dashes plus one joint per column.
 #[cfg(feature = "xlsx")]
-fn grid_separator(visible_cols: usize) -> Line<'static> {
+fn grid_separator(visible_cols: usize, theme: crate::Theme) -> Line<'static> {
     let mut rule = "─".repeat(crate::sheet::ROW_GUTTER);
     for _ in 0..visible_cols {
         rule.push('┼');
         rule.push_str(&"─".repeat(crate::sheet::CELL_WIDTH));
     }
-    Line::styled(rule, Style::default().fg(Color::DarkGray))
+    Line::styled(rule, Style::default().fg(theme.dim))
 }

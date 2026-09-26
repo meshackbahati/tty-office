@@ -63,6 +63,11 @@ pub(crate) fn rows(app: &App) -> Vec<SidebarRow> {
         entry("Find…", RowKind::Act(Action::Find)),
         entry("Replace…", RowKind::Act(Action::Replace)),
         entry("Help", RowKind::Act(Action::Help)),
+        header("View"),
+        entry(
+            &format!("Theme: {}", app.theme().name),
+            RowKind::Act(Action::CycleTheme),
+        ),
         header("Tabs"),
     ];
     let tabs = (0..app.tab_count()).map(|i| {

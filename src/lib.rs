@@ -33,6 +33,7 @@ mod rich;
 #[cfg(feature = "xlsx")]
 mod sheet;
 mod text;
+mod theme;
 mod ui;
 
 pub use app::{open_optional, App, Mode, PromptKind};
@@ -50,6 +51,7 @@ pub use rich::{RichDocument, RichFormat};
 #[cfg(feature = "xlsx")]
 pub use sheet::{Cell, CellValue, SheetDocument, SheetFormat};
 pub use text::TextDocument;
+pub use theme::Theme;
 pub use ui::draw;
 
 /// Full help document embedded from `docs/KEYMAP.md`.

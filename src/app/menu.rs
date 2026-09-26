@@ -106,7 +106,7 @@ static EDIT_ITEMS: [MenuItem; 7] = [
     },
 ];
 
-static VIEW_ITEMS: [MenuItem; 5] = [
+static VIEW_ITEMS: [MenuItem; 6] = [
     MenuItem {
         label: "Show position",
         action: Action::ShowPosition,
@@ -126,6 +126,11 @@ static VIEW_ITEMS: [MenuItem; 5] = [
         label: "Reset zoom",
         action: Action::ZoomReset,
         shortcut: "Ctrl+0",
+    },
+    MenuItem {
+        label: "Cycle theme",
+        action: Action::CycleTheme,
+        shortcut: "Alt+T",
     },
     MenuItem {
         label: "Keyboard shortcuts",

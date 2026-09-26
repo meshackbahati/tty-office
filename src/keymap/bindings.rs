@@ -29,6 +29,7 @@ pub(crate) fn default_bindings() -> Vec<(Chord, Action)> {
         (Chord::new(K::Char('+'), m), Action::ZoomIn),
         (Chord::new(K::Char('-'), m), Action::ZoomOut),
         (Chord::new(K::Char('0'), m), Action::ZoomReset),
+        (Chord::new(K::Char('t'), a), Action::CycleTheme),
         (Chord::new(K::F(4), m), Action::CloseTab),
         (Chord::new(K::PageDown, m), Action::NextTab),
         (Chord::new(K::PageUp, m), Action::PrevTab),

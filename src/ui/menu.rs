@@ -52,6 +52,8 @@ pub(super) fn draw_dropdown(frame: &mut Frame<'_>, app: &App) {
             Line::from(Span::styled(row, style))
         })
         .collect();
-    let block = Block::bordered().title(LABELS[menu.min(LABELS.len() - 1)]);
+    let block = Block::bordered()
+        .title(LABELS[menu.min(LABELS.len() - 1)])
+        .border_style(Style::default().fg(app.theme().dim));
     frame.render_widget(Paragraph::new(rows).block(block), rect);
 }

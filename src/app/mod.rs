@@ -104,6 +104,8 @@ pub struct App {
     drag: Option<mouse::DragOrigin>,
     /// Display zoom: extra blank rows per text line, up to MAX_ZOOM.
     zoom: u8,
+    /// Accent palette for chrome; cycled by chord, set by config.
+    theme: crate::Theme,
     /// Resolved key bindings.
     pub keymap: Keymap,
     /// Transient status line content.
@@ -144,6 +146,7 @@ pub struct App {
 impl App {
     /// Wrap an open document with default keymap and empty prompts.
     pub fn new(doc: Document) -> Self {
+        let config = crate::keymap::Config::load_user();
         Self {
             doc,
             background: Vec::new(),
@@ -169,13 +172,21 @@ impl App {
             proof: crate::proof::ProofEngine::load().ok(),
             #[cfg(feature = "proof")]
             proof_rev: None,
-            page_layout: PageLayout::new(
-                crate::keymap::Config::load_user()
-                    .page_lines
-                    .unwrap_or(PageLayout::DEFAULT_LINES),
-            ),
+            page_layout: PageLayout::new(config.page_lines.unwrap_or(PageLayout::DEFAULT_LINES)),
             pending_replace: Vec::new(),
+            // Unknown theme names fall back to monochrome; a broken theme
+            // key must not prevent the editor from starting.
+            theme: config
+                .theme
+                .as_deref()
+                .and_then(crate::Theme::by_name)
+                .unwrap_or(crate::Theme::MONO),
         }
+    }
+
+    /// Accent palette currently applied to the chrome.
+    pub fn theme(&self) -> crate::Theme {
+        self.theme
     }
 
     /// Page geometry the viewport and the status bar render with.

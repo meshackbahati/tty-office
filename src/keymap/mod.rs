@@ -41,6 +41,8 @@ pub enum Action {
     ZoomOut,
     /// Return to one row per text line.
     ZoomReset,
+    /// Step to the next display theme.
+    CycleTheme,
     /// Write out to the current path.
     Save,
     /// Prompt for a destination path and save there.
@@ -206,6 +208,10 @@ pub struct Config {
     /// Logical lines per page; absent or zero keeps the default page model.
     #[serde(default)]
     pub page_lines: Option<usize>,
+    /// Theme preset name, e.g. `theme = "ocean"`; unknown names fall back
+    /// to the monochrome default rather than failing to start.
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
 impl Config {
@@ -387,6 +393,7 @@ pub fn describe(action: &Action) -> String {
         Action::ZoomIn => "Zoom in".into(),
         Action::ZoomOut => "Zoom out".into(),
         Action::ZoomReset => "Reset zoom".into(),
+        Action::CycleTheme => "Cycle theme".into(),
         Action::Save => "Save file".into(),
         Action::SaveAs => "Save as".into(),
         Action::ReadFile => "Insert file at cursor".into(),
@@ -431,6 +438,7 @@ fn action_from_name(name: &str) -> Option<Action> {
         "zoom_in" => ZoomIn,
         "zoom_out" => ZoomOut,
         "zoom_reset" => ZoomReset,
+        "cycle_theme" => CycleTheme,
         "save" => Save,
         "save_as" => SaveAs,
         "read_file" => ReadFile,

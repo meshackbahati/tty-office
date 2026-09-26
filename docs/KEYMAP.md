@@ -148,3 +148,11 @@ further. The status bar shows the percentage while zoomed.
 | Ctrl+=, Ctrl++ | Zoom in, up to 200%. |
 | Ctrl+- | Zoom out. |
 | Ctrl+0 | Reset zoom to 100%. |
+
+## Themes
+
+Four chrome palettes ship with the suite: Mono, Ocean, Ember, and
+Forest. Alt+T steps through them for the session, and
+`theme = "ocean"` in `~/.config/tty-office/config.toml` sets the
+default; unknown names fall back to Mono. The sidebar names the
+current theme, and its row cycles as well.
