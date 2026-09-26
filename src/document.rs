@@ -318,7 +318,7 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
             #[cfg(not(feature = "pdf"))]
             let pdf = "";
             let name = if other.is_empty() { "unknown" } else { other };
-            Err(DocumentError::UnsupportedFormat(format(
+            Err(DocumentError::UnsupportedFormat(format!(
                 ".{name} cannot be opened (open txt, md{rich}{sheet}{pdf})"
             )))
         }

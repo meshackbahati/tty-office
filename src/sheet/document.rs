@@ -194,6 +194,11 @@ impl SheetDocument {
         used_range(&self.cells)
     }
 
+    /// Number of cells holding a formula, for headless summaries.
+    pub fn formula_count(&self) -> usize {
+        self.cells.values().filter(|c| c.formula.is_some()).count()
+    }
+
     /// First visible row index.
     pub fn rowoff(&self) -> usize {
         self.rowoff

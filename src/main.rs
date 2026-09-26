@@ -7,11 +7,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
 use crossterm::execute;
 use ratatui::DefaultTerminal;
-use tty_office::{draw, open_optional, App};
+use tty_office::{cat_text, convert_files, draw, info_text, open_optional, App};
 
 /// Pure TTY Document Suite — word documents, spreadsheets, text, and PDF
 /// export, with a plain-text fallback behind `--no-default-features`.
@@ -22,13 +22,48 @@ struct Cli {
     /// that saves to that path.
     path: Option<PathBuf>,
 
+    /// Headless operation without the terminal interface.
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Initialize the terminal and panic, for the restore-on-panic check.
     #[arg(long, hide = true)]
     self_test_panic: bool,
 }
 
+/// Scriptable document operations sharing the interface's open and save.
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Print the document text to stdout.
+    Cat {
+        /// File to read.
+        file: PathBuf,
+    },
+    /// Print document metadata as `key: value` lines.
+    Info {
+        /// File to inspect.
+        file: PathBuf,
+    },
+    /// Convert between formats, inferring both from their extensions.
+    Convert {
+        /// File to read.
+        input: PathBuf,
+        /// File to write.
+        output: PathBuf,
+    },
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    if let Some(command) = cli.command {
+        let output = match command {
+            Command::Cat { file } => cat_text(&file)?,
+            Command::Info { file } => info_text(&file)?,
+            Command::Convert { input, output } => convert_files(&input, &output)?,
+        };
+        print!("{output}");
+        return Ok(());
+    }
     let terminal = ratatui::init();
     // Mouse reporting stays enabled across a panic unless the hook turns
     // it off first, so chain the disable ahead of ratatui's restore hook.
