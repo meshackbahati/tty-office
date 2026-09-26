@@ -119,7 +119,8 @@ fn sidebar_shifts_the_text_pane_right() {
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     // Menu row 0, hairline row 1, first text row 2; the 22-column
-    // sidebar pushes the caret, which follows "hello", to column 27.
+    // sidebar plus the page border pushes the caret, which follows
+    // "hello", to column 28.
     // The mouse step relies on this geometry contract.
-    term.backend_mut().assert_cursor_position((27, 2));
+    term.backend_mut().assert_cursor_position((28, 2));
 }

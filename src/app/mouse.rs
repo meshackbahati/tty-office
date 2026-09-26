@@ -190,7 +190,9 @@ impl App {
     /// cell maps into the prose surface.
     fn prose_position(&mut self, x: u16, y: u16) -> Option<(usize, usize)> {
         let view = self.view;
-        if y <= view.text_y {
+        // The left page border owns the first pane column; it selects
+        // nothing, and content starts one cell to its right.
+        if y <= view.text_y || x <= view.text_x {
             return None;
         }
         let r = (y - view.text_y - 1) as usize;
@@ -200,7 +202,7 @@ impl App {
         }
         let line = self.display_row_to_line(r)?;
         let surface = self.doc.prose_surface()?;
-        let col = (x.saturating_sub(view.text_x) as usize) + surface.coloff();
+        let col = (x - view.text_x - 1) as usize + surface.coloff();
         Some((line, col))
     }
 

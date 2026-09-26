@@ -73,8 +73,9 @@ fn selection_is_marked_in_rendered_line() {
     let buffer = term.backend().buffer();
     let area = *buffer.area();
     // Row 2 is the first text row: row 0 holds the menu bar and row 1 the
-    // pane hairline.
-    let cell = &buffer[(area.left(), area.top() + 2)];
+    // pane hairline. Column 0 is the page side border, so the text starts
+    // at column 1.
+    let cell = &buffer[(area.left() + 1, area.top() + 2)];
     // Reverse video is applied via style; assert the glyph itself still paints.
     assert_eq!(cell.symbol(), "s");
 }
@@ -140,9 +141,9 @@ fn find_highlight_marks_the_current_match() {
     let text = buffer_text(&mut term);
     assert!(text.contains("alpha beta alpha"), "body changed: {text}");
     // Row 0 holds the menu bar and the text pane draws a one-row hairline
-    // on top, so the first document line sits at row 2. "beta" occupies
-    // columns 6..10 of that line.
-    for x in 6..10u16 {
+    // on top, so the first document line sits at row 2; the page border
+    // holds column 0, so "beta" occupies columns 7..11 of that line.
+    for x in 7..11u16 {
         let buffer = term.backend().buffer();
         let style = buffer[(x, 2)].style();
         assert!(
@@ -200,8 +201,21 @@ fn cursor_sits_on_the_first_text_row_below_the_top_hairline() {
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     // Row 0 holds the menu bar and row 1 the hairline that closes the top
     // of the text pane, so the caret must be placed on row 2, which holds
-    // the first document line. The caret sits after the inserted "hello",
-    // hence column 5; the row is the regression target, since the old code
-    // drew it onto the hairline.
-    term.backend_mut().assert_cursor_position((5, 2));
+    // the first document line. The page side border holds column 0 and the
+    // caret sits after the inserted "hello", hence column 6; the row is
+    // the regression target, since the old code drew it onto the hairline.
+    term.backend_mut().assert_cursor_position((6, 2));
+}
+
+#[test]
+fn page_frame_borders_the_text_pane() {
+    let mut app = app_with("hello");
+    let backend = TestBackend::new(30, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    let text = buffer_text(&mut term);
+    assert!(text.contains('│'), "side borders missing: {text}");
+    let rows: Vec<&str> = text.lines().collect();
+    // Row 2 is the first text row; the right border lands on the pane edge.
+    assert!(rows[2].ends_with('│'), "right border missing: {text}");
 }

@@ -153,6 +153,8 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     };
     let height = area.height as usize;
     let width = area.width as usize;
+    // Text occupies the pane between the page side borders.
+    let content_w = width.saturating_sub(2);
     let layout = app.page_layout();
 
     // Break rules above page starts consume viewport rows of their own, so
@@ -180,7 +182,7 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             continue;
         }
         if cur >= line_count {
-            lines.push(Line::from(""));
+            lines.push(blank_frame(width));
             continue;
         }
         let Some((raw, line_start)) = (|| {
@@ -191,20 +193,23 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             // mid-frame the pane simply stops drawing rather than panicking.
             break;
         };
-        lines.push(render_line(
-            &raw,
-            line_start,
-            coloff,
-            width,
-            &decor,
-            cur == cursor_line,
-            cursor_col,
+        lines.push(frame_line(
+            render_line(
+                &raw,
+                line_start,
+                coloff,
+                content_w,
+                &decor,
+                cur == cursor_line,
+                cursor_col,
+            ),
+            content_w,
         ));
         for _ in 1..step {
             if lines.len() >= height {
                 break;
             }
-            lines.push(Line::from(""));
+            lines.push(blank_frame(width));
         }
         cur += 1;
         rule_drawn = false;
@@ -227,8 +232,10 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     let view_row = (cursor_line - rowoff) * step + layout.breaks_between(rowoff, cursor_line);
     if view_row + 1 < height {
         let disp = cursor_col.saturating_sub(coloff);
-        if disp < width {
-            let x = area.x + disp as u16;
+        // The left page border holds the first content column, so the
+        // caret renders one cell to the right of the pane edge.
+        if disp < content_w {
+            let x = area.x + 1 + disp as u16;
             let y = area.y + 1 + view_row as u16;
             frame.set_cursor_position((x, y));
         }
@@ -236,13 +243,32 @@ fn draw_text(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
 }
 
 /// Hairline rule marking the boundary above `line`, carrying its page number.
+/// The joints tie into the page side borders drawn around text rows.
 fn page_rule(layout: &PageLayout, line: usize, width: usize) -> Line<'static> {
     let label = format!(" page {} ", layout.page_of(line));
-    let pad = width.saturating_sub(label.chars().count());
-    let before = pad / 2;
-    let after = pad - before;
-    let text = format!("{}{}{}", "─".repeat(before), label, "─".repeat(after));
+    let inner = width.saturating_sub(2);
+    let fill = inner.saturating_sub(label.chars().count());
+    let left = fill / 2;
+    let right = fill - left;
+    let text = format!("├{}{}{}┤", "─".repeat(left), label, "─".repeat(right));
     Line::styled(text, Style::default().fg(Color::DarkGray))
+}
+
+/// Wrap a rendered text line in the page side borders, padding short
+/// lines so the right border always lands on the pane edge.
+fn frame_line<'a>(mut line: Line<'a>, content_w: usize) -> Line<'a> {
+    let pad = content_w.saturating_sub(line.width());
+    let mut spans = Vec::with_capacity(line.spans.len() + 2);
+    spans.push(Span::raw("│"));
+    spans.append(&mut line.spans);
+    spans.push(Span::raw(format!("{}│", " ".repeat(pad))));
+    Line::from(spans)
+}
+
+/// Blank framed row for viewport space past the document end and for
+/// the blank rows zoom levels insert between lines.
+fn blank_frame(width: usize) -> Line<'static> {
+    Line::from(format!("│{}│", " ".repeat(width.saturating_sub(2))))
 }
 
 fn render_line<'a>(

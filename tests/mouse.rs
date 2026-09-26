@@ -46,9 +46,10 @@ fn cursor_char(app: &mut App) -> usize {
 fn click_places_the_caret() {
     let mut app = app_with("hello world");
     drawn(&mut app);
-    // Sidebar takes columns 0..22, so text column 6 is frame column 28;
-    // row 2 is the first document line below the menu and the hairline.
-    app.handle_mouse(down(28, 2));
+    // Sidebar takes columns 0..22 and the page border column 22, so text
+    // column 6 is frame column 29; row 2 is the first document line below
+    // the menu and the hairline.
+    app.handle_mouse(down(29, 2));
     assert_eq!(cursor_char(&mut app), 6);
 }
 
@@ -56,8 +57,8 @@ fn click_places_the_caret() {
 fn drag_selects_a_range() {
     let mut app = app_with("hello world");
     drawn(&mut app);
-    app.handle_mouse(down(28, 2));
-    app.handle_mouse(drag_to(33, 2));
+    app.handle_mouse(down(29, 2));
+    app.handle_mouse(drag_to(34, 2));
     app.handle_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 33, 2));
     assert_eq!(
         app.doc.selection(),

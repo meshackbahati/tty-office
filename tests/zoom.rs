@@ -65,14 +65,21 @@ fn zoom_keys_adjust_level_and_reset() {
 fn zoom_inserts_blank_rows_between_lines() {
     let mut app = app_with("a\nb");
     let plain = drawn(&mut app);
-    assert_eq!(plain[2], "a");
-    assert_eq!(plain[3], "b");
+    assert!(plain[2].starts_with("│a"), "rows: {plain:?}");
+    assert!(plain[3].starts_with("│b"), "rows: {plain:?}");
     app.handle_key(ctrl('='));
     let zoomed = drawn(&mut app);
-    // Menu row 0, hairline row 1, then each line with one blank row after.
-    assert_eq!(zoomed[2], "a");
-    assert_eq!(zoomed[3], "");
-    assert_eq!(zoomed[4], "b");
+    // Menu row 0, hairline row 1, then each line with one blank framed
+    // row after it; rows are trimmed on the right but keep both borders.
+    assert!(zoomed[2].starts_with("│a"), "rows: {zoomed:?}");
+    assert!(zoomed[2].ends_with('│'), "rows: {zoomed:?}");
+    assert_eq!(
+        zoomed[3].chars().filter(|&c| c == '│').count(),
+        2,
+        "rows: {zoomed:?}"
+    );
+    assert!(!zoomed[3].contains(['a', 'b']), "rows: {zoomed:?}");
+    assert!(zoomed[4].starts_with("│b"), "rows: {zoomed:?}");
 }
 
 #[test]
@@ -83,8 +90,9 @@ fn zoom_moves_the_cursor_with_its_line() {
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     // The caret follows "b" at the end of the buffer: line 1 renders at
-    // display row 2 with one zoom row per line, below menu and hairline.
-    term.backend_mut().assert_cursor_position((1, 4));
+    // display row 2 with one zoom row per line, below menu and hairline,
+    // one column right for the page border.
+    term.backend_mut().assert_cursor_position((2, 4));
 }
 
 #[test]
@@ -130,10 +138,11 @@ fn mouse_click_accounts_for_zoom_rows() {
     app.handle_key(ctrl('='));
     drawn(&mut app);
     // Line 1 ("b") sits at display row 2 once zoom inserts a blank row,
-    // which is frame row 4 below the menu and the hairline.
+    // which is frame row 4 below the menu and the hairline; column 1 is
+    // the first content column past the page border.
     app.handle_mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
-        column: 0,
+        column: 1,
         row: 4,
         modifiers: KeyModifiers::NONE,
     });
