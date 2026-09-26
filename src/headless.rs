@@ -41,6 +41,7 @@ pub fn info_text(file: &Path) -> Result<String, DocumentError> {
                 crate::SheetFormat::Xlsx => "xlsx",
                 crate::SheetFormat::Ods => "ods",
                 crate::SheetFormat::Xls => "xls",
+                crate::SheetFormat::Csv => "csv",
             };
             out.push_str(&format!("kind: spreadsheet ({format})\n"));
             out.push_str(&format!("bytes: {bytes}\n"));

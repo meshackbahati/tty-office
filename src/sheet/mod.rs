@@ -10,6 +10,7 @@
 //! converted back into the package dialect on save.
 
 mod cell;
+mod csv;
 mod document;
 mod edit;
 mod formula;

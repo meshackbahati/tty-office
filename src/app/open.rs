@@ -41,6 +41,7 @@ pub(crate) fn default_save_name(doc: &Document) -> String {
             crate::SheetFormat::Xls => "untitled.xlsx".to_string(),
             crate::SheetFormat::Xlsx => "untitled.xlsx".to_string(),
             crate::SheetFormat::Ods => "untitled.ods".to_string(),
+            crate::SheetFormat::Csv => "untitled.csv".to_string(),
         },
     }
 }

@@ -127,6 +127,11 @@ mod sheets {
     fn ods_corpus_roundtrip() {
         roundtrip("sales.ods");
     }
+
+    #[test]
+    fn csv_corpus_roundtrip() {
+        roundtrip("data.csv");
+    }
 }
 
 /// Plain text fixtures need no backend feature: they pin the text surface

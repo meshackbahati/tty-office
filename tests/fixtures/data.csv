@@ -1,0 +1,4 @@
+region,q1,q2
+north,120,135
+south,98,104
+total,=B2+B3,=C2+C3

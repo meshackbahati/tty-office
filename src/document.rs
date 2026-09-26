@@ -75,6 +75,7 @@ impl Document {
                 crate::SheetFormat::Xlsx => "xlsx",
                 crate::SheetFormat::Ods => "ods",
                 crate::SheetFormat::Xls => "xlsx",
+                crate::SheetFormat::Csv => "csv",
             },
         }
     }
@@ -291,7 +292,7 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
             }
         }
         #[cfg(feature = "xlsx")]
-        "xlsx" | "ods" | "xls" => {
+        "xlsx" | "ods" | "xls" | "csv" => {
             let format = crate::sheet::SheetFormat::from_path(path)
                 .ok_or_else(|| DocumentError::UnsupportedFormat(ext.clone()))?;
             if path.exists() {

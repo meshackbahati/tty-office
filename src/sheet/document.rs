@@ -237,6 +237,19 @@ impl SheetDocument {
                 message: "binary .xls cannot be written; save as .xlsx or .ods".to_string(),
             });
         }
+        if target_format == SheetFormat::Csv {
+            // CSV writes straight from the grid; no package takes part,
+            // and formulas travel as their `=` text.
+            let text = super::csv::grid_to_csv(&self.cells);
+            std::fs::write(target, text).map_err(|err| DocumentError::Save {
+                path: target.to_path_buf(),
+                message: err.to_string(),
+            })?;
+            self.path = Some(target.to_path_buf());
+            self.format = SheetFormat::Csv;
+            self.dirty = false;
+            return Ok(());
+        }
 
         let rebuilding =
             target_format != self.format || !package_matches(&self.package, target_format);

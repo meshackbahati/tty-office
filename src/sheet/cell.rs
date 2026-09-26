@@ -18,6 +18,9 @@ pub enum SheetFormat {
     /// Legacy binary workbook (`.xls`), read-only; save refuses with a
     /// message directing the user to xlsx or ods.
     Xls,
+    /// Comma-separated values (`.csv`): plain text with quoting, where
+    /// the grid is the sole storage and formulas travel as `=` text.
+    Csv,
 }
 
 impl SheetFormat {
@@ -31,6 +34,7 @@ impl SheetFormat {
             "xlsx" => Some(Self::Xlsx),
             "ods" => Some(Self::Ods),
             "xls" => Some(Self::Xls),
+            "csv" => Some(Self::Csv),
             _ => None,
         }
     }

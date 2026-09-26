@@ -23,6 +23,8 @@ pub(crate) enum Package {
     Ods(spreadsheet_ods::WorkBook),
     /// Read-only binary marker; the grid is the sole storage after load.
     Xls,
+    /// Plain-text marker; the grid is the sole storage after load.
+    Csv,
 }
 
 pub(crate) fn new_package(format: SheetFormat) -> Package {
@@ -34,6 +36,7 @@ pub(crate) fn new_package(format: SheetFormat) -> Package {
             Package::Ods(book)
         }
         SheetFormat::Xls => Package::Xls,
+        SheetFormat::Csv => Package::Csv,
     }
 }
 
@@ -43,6 +46,7 @@ pub(crate) fn package_matches(package: &Package, format: SheetFormat) -> bool {
         (Package::Xlsx(_), SheetFormat::Xlsx)
             | (Package::Ods(_), SheetFormat::Ods)
             | (Package::Xls, SheetFormat::Xls)
+            | (Package::Csv, SheetFormat::Csv)
     )
 }
 
@@ -66,6 +70,14 @@ pub(crate) fn load_package(
         SheetFormat::Xls => {
             let cells = load_xls_grid(path)?;
             Ok((Package::Xls, cells))
+        }
+        SheetFormat::Csv => {
+            let text =
+                fs::read_to_string(path).map_err(|err| DocumentError::Parse(err.to_string()))?;
+            // CSV parse errors cannot happen by construction, so every
+            // readable file loads; formulas re-evaluate with the grid.
+            let cells = super::csv::cells_from_rows(super::csv::parse_csv(&text));
+            Ok((Package::Csv, cells))
         }
     }
 }
@@ -210,6 +222,12 @@ pub(crate) fn sync_grid_into_package(
         (Package::Xls, _) => Err(DocumentError::Save {
             path: PathBuf::from("[xls]"),
             message: "binary .xls cannot be written; save as .xlsx or .ods".to_string(),
+        }),
+        (Package::Csv, SheetFormat::Csv) => Err(DocumentError::Save {
+            // CSV writes straight from the grid in `save_to` and never
+            // reaches the package sync, so this arm is unreachable.
+            path: PathBuf::from("[csv]"),
+            message: "internal package format mismatch".to_string(),
         }),
         _ => Err(DocumentError::Save {
             path: PathBuf::from("[package]"),

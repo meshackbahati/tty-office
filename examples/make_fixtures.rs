@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
         (3, 1, "=B2+B3"),
         (3, 2, "=C2+C3"),
     ];
-    for name in ["budget.xlsx", "sales.ods"] {
+    for name in ["budget.xlsx", "sales.ods", "data.csv"] {
         let path = root.join(name);
         let _ = std::fs::remove_file(&path);
         let mut doc = open(&path)?;
