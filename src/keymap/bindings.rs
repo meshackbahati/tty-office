@@ -78,5 +78,9 @@ pub(crate) fn default_bindings() -> Vec<(Chord, Action)> {
         (Chord::new(K::End, s), Action::Extend(Motion::LineEnd)),
         (Chord::new(K::Home, m), Action::Move(Motion::BufferStart)),
         (Chord::new(K::End, m), Action::Move(Motion::BufferEnd)),
+        (Chord::new(K::Left, m), Action::Move(Motion::WordLeft)),
+        (Chord::new(K::Right, m), Action::Move(Motion::WordRight)),
+        (Chord::new(K::Left, m | s), Action::Extend(Motion::WordLeft)),
+        (Chord::new(K::Right, m | s), Action::Extend(Motion::WordRight)),
     ]
 }

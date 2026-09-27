@@ -328,3 +328,40 @@ fn prompt_arrows_edit_within_the_buffer() {
     app.handle_key(key(KeyCode::Char('y'), KeyModifiers::NONE));
     assert_eq!(app.prompt_buf, "zacy");
 }
+
+#[test]
+fn ctrl_arrows_move_by_word() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = plain_app();
+    app.doc.insert_str("hello world test");
+    app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL));
+    let right = KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL);
+    app.handle_key(right);
+    assert_eq!(cursor_of(&mut app), 5);
+    app.handle_key(right);
+    assert_eq!(cursor_of(&mut app), 11);
+    let left = KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL);
+    app.handle_key(left);
+    assert_eq!(cursor_of(&mut app), 6);
+}
+
+fn cursor_of(app: &mut App) -> usize {
+    app.doc.prose_surface().expect("surface").cursor_char()
+}
+
+#[test]
+fn ctrl_shift_arrows_select_by_word() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use tty_office::Cursor;
+    let mut app = plain_app();
+    app.doc.insert_str("hello world test");
+    app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::CONTROL));
+    app.handle_key(KeyEvent::new(
+        KeyCode::Right,
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    ));
+    assert_eq!(
+        app.doc.selection(),
+        Some((Cursor::Char(0), Cursor::Char(5)))
+    );
+}

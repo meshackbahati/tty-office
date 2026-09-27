@@ -48,6 +48,10 @@ pub enum Motion {
     BufferStart,
     /// End of the document.
     BufferEnd,
+    /// Start of the previous word.
+    WordLeft,
+    /// Past the end of the next word.
+    WordRight,
 }
 
 /// The editing surface that the UI drives, independent of concrete format.

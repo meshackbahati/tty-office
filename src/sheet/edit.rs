@@ -287,6 +287,16 @@ pub(crate) fn move_grid(doc: &mut SheetDocument, motion: crate::editor::Motion, 
             }
             doc.cursor_col += 1;
         }
+        Motion::WordLeft => {
+            // Grids have no words; word motions step one cell, and the
+            // anchor guard above already cleared any selection.
+            if doc.cursor_col > 0 {
+                doc.cursor_col -= 1;
+            }
+        }
+        Motion::WordRight => {
+            doc.cursor_col += 1;
+        }
         Motion::Up => {
             doc.cursor_row = doc.cursor_row.saturating_sub(1);
         }

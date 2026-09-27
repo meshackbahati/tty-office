@@ -155,6 +155,8 @@ pub fn action_name(action: &Action) -> Option<&'static str> {
             ("move", Motion::PageDown) => "move_page_down",
             ("move", Motion::BufferStart) => "move_buffer_start",
             ("move", Motion::BufferEnd) => "move_buffer_end",
+            ("move", Motion::WordLeft) => "move_word_left",
+            ("move", Motion::WordRight) => "move_word_right",
             (_, Motion::Left) => "extend_left",
             (_, Motion::Right) => "extend_right",
             (_, Motion::Up) => "extend_up",
@@ -165,6 +167,8 @@ pub fn action_name(action: &Action) -> Option<&'static str> {
             (_, Motion::PageDown) => "extend_page_down",
             (_, Motion::BufferStart) => "extend_buffer_start",
             (_, Motion::BufferEnd) => "extend_buffer_end",
+            (_, Motion::WordLeft) => "extend_word_left",
+            (_, Motion::WordRight) => "extend_word_right",
         }
     };
     Some(match action {
@@ -269,6 +273,10 @@ pub(crate) fn action_from_name(name: &str) -> Option<Action> {
         "extend_page_down" => Extend(Motion::PageDown),
         "extend_buffer_start" => Extend(Motion::BufferStart),
         "extend_buffer_end" => Extend(Motion::BufferEnd),
+        "move_word_left" => Move(Motion::WordLeft),
+        "move_word_right" => Move(Motion::WordRight),
+        "extend_word_left" => Extend(Motion::WordLeft),
+        "extend_word_right" => Extend(Motion::WordRight),
         "confirm" => Confirm,
         "cancel" => Cancel,
         "prompt_backspace" => PromptBackspace,

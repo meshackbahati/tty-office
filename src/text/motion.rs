@@ -251,11 +251,39 @@ impl TextDocument {
             }
             Motion::BufferStart => self.set_cursor(0, extend),
             Motion::BufferEnd => self.set_cursor(self.rope.len_chars(), extend),
+            Motion::WordLeft => self.move_word(-1, extend),
+            Motion::WordRight => self.move_word(1, extend),
         }
     }
 
-    pub(crate) fn move_vertical(&mut self, delta: i32, extend: bool) {
-        let line = self.cursor_line() as i64;
+    /// Move by words: backward lands on the previous word start,
+    /// forward lands past the next word end. Whitespace and newlines
+    /// separate words; underscores count as word characters.
+    pub(crate) fn move_word(&mut self, delta: i32, extend: bool) {
+        fn is_word(ch: char) -> bool {
+            ch.is_alphanumeric() || ch == '_'
+        }
+        let len = self.rope.len_chars();
+        let mut at = self.cursor;
+        if delta < 0 {
+            while at > 0 && !is_word(self.rope.char(at - 1)) {
+                at -= 1;
+            }
+            while at > 0 && is_word(self.rope.char(at - 1)) {
+                at -= 1;
+            }
+        } else {
+            while at < len && !is_word(self.rope.char(at)) {
+                at += 1;
+            }
+            while at < len && is_word(self.rope.char(at)) {
+                at += 1;
+            }
+        }
+        self.set_cursor(at, extend);
+    }
+
+    pub(crate) fn move_vertical(&mut self, delta: i32, extend: bool) {        let line = self.cursor_line() as i64;
         let target = (line + i64::from(delta)).clamp(0, self.line_count() as i64 - 1) as usize;
         let goal = self.goal_col;
         let off = self.char_off_for_display_col(target, goal);
