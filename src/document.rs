@@ -214,7 +214,9 @@ impl Document {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Text,
+    #[cfg(feature = "docx")]
     Rich,
+    #[cfg(feature = "xlsx")]
     Sheet,
 }
 

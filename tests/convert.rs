@@ -4,7 +4,10 @@
 use std::path::PathBuf;
 
 use tempfile::TempDir;
-use tty_office::{open, Document, Editor};
+use tty_office::{open, Document};
+
+#[cfg(any(feature = "docx", feature = "xlsx"))]
+use tty_office::Editor;
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -14,6 +17,7 @@ fn fixture(name: &str) -> PathBuf {
 
 /// A `.docx` is a zip package; the central directory signature must be
 /// present or the file is corrupt text with the wrong name.
+#[cfg(feature = "docx")]
 fn assert_valid_zip(path: &std::path::Path) {
     let bytes = std::fs::read(path).expect("read output");
     assert!(
