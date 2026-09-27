@@ -9,27 +9,55 @@ Pure TTY Document Suite
 
 Word documents (DOCX, ODT), spreadsheets (XLSX, ODS, XLS, CSV),
 plain text, and Markdown, with PDF viewing and export, in one
-terminal session. Tabs hold several documents at once; a menu bar,
-sidebar, and mouse support sit beside the Nano-style keyboard
-contract. Headless subcommands (`cat`, `info`, `convert`) script
-the same open and save paths without the interface.
+terminal session. Writer and calc share tabs, a menu bar, a sidebar,
+a file browser, mouse support, and one configuration, beside a
+Nano-style keyboard contract where every shortcut is rebindable.
+Headless subcommands (`cat`, `info`, `convert`) script the same
+open and save paths without the interface.
 
 ## Run
 
 ```sh
 cargo install --path .
-tty-office notes.odt
+tty-office notes.docx
 ```
 
 Open `tty-office` without arguments for an untitled word document.
-Press Ctrl+G for the full key list, F10 for the menu bar, and Ctrl+B
-for the sidebar. Headless use never touches the terminal:
+Press `Ctrl+G` for the live key list, `F10` for the menu bar,
+`Ctrl+B` for the sidebar, `Ctrl+O` for the file browser, and `F6`
+to move keyboard focus between text and sidebar. Headless use never
+touches the terminal:
 
 ```sh
 tty-office cat report.docx
 tty-office info budget.xlsx
 tty-office convert budget.xlsx budget.ods
 ```
+
+A Linux binary rides each GitHub release for machines without a
+Rust toolchain.
+
+## Writing
+
+Documents wrap at the viewport width inside a page frame with side
+borders, double-rule page breaks, and a page readout; `Alt+PageUp`
+and `Alt+PageDown` jump between pages and zoom adjusts line rhythm.
+Headings 1–9 apply from `Ctrl+1..9` or the Format menu and persist
+in the package, while bold, italic, underline, and hyperlinks read
+from the document and render distinctly. Links open with `Ctrl+Enter`
+or `Ctrl+click`. Five themes include a white Paper page, and the
+help overlay always shows the bindings the user actually set.
+
+## Calculating
+
+The grid draws full borders with joints, echoes typing inside the
+cursor cell, and places a visible caret. Formulas cover aggregates,
+logic, text, and math with dependent-only recalculation, so typing
+stays responsive on large sheets. `Ctrl+D` fills down and
+`Ctrl+Shift+R` fills right with relative reference shifting;
+`Alt+R` and `Alt+C` select whole rows and columns, as do gutter and
+header clicks. Word motion, drag selection, and the wheel work
+throughout, and every grid action is rebindable.
 
 ## How it differs
 
@@ -44,15 +72,16 @@ and docx viewers such as doxx read Word files without editing them
 text and code only.
 
 tty-office is a suite instead: writer and calc share one session,
-one clipboard, one undo model per document, and one configuration.
+one cutbuffer, one undo model per document, and one configuration.
 A budget sheet and its supporting memo sit in adjacent tabs; either
 can be converted headlessly in a pipeline.
 
 ## Layout
 
 - `src/`: the suite; `text/`, `rich/`, and `sheet/` own the three
-  document surfaces, while `app/` and `ui/` own state and rendering.
-- `docs/KEYMAP.md`: every binding, and the help overlay embeds it.
+  document surfaces, while `app/` and `ui/` own state, chrome, and
+  rendering. `keymap/` splits actions, chords, config, and lookup.
+- `docs/KEYMAP.md`: every binding and config name with a rebinding guide.
 - `docs/FORMATS.md`: format support and dictionary setup.
 - `docs/FORMULAS.md`: tested spreadsheet functions and limits.
 - `docs/PERF.md`: performance and memory budgets with measurements.
@@ -64,5 +93,6 @@ can be converted headlessly in a pipeline.
 Spell checking underlines against system Hunspell dictionaries,
 find and replace previews matches before applying them, and release
 builds carry performance budgets for rendering and large files.
-Images inside documents and tracked change histories are not
-implemented yet; both are planned before stable.
+Multi-sheet workbooks, per-sheet charts, inline images, and tracked
+change histories are planned; circular references and unknown
+functions already evaluate to cell errors rather than hangs.
