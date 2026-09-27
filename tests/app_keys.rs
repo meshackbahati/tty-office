@@ -271,3 +271,41 @@ fn untitled_document_opens_as_rich_and_suggests_docx() {
     app.handle_key(ctrl('s'));
     assert_eq!(app.prompt_buf, "untitled.docx");
 }
+
+#[test]
+fn rebound_cancel_chord_cancels_prompts() {
+    use std::collections::HashMap;
+    use tty_office::{Config, Keymap};
+
+    let mut app = plain_app();
+    app.keymap = Keymap::from_config(Config {
+        keys: HashMap::from([("cancel".to_string(), "ctrl+g".to_string())]),
+        ..Default::default()
+    });
+    app.handle_key(ctrl('f'));
+    for c in "needle".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(ctrl('g'));
+    assert_eq!(app.mode, Mode::Normal);
+    assert_eq!(app.prompt_buf, "");
+}
+
+#[test]
+fn rebound_confirm_chord_confirms_prompts() {
+    use std::collections::HashMap;
+    use tty_office::{Config, Keymap};
+
+    let mut app = plain_app();
+    app.keymap = Keymap::from_config(Config {
+        keys: HashMap::from([("confirm".to_string(), "ctrl+j".to_string())]),
+        ..Default::default()
+    });
+    app.handle_key(ctrl('f'));
+    for c in "hello".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Char('j'), KeyModifiers::CONTROL));
+    // The prompt closes; the empty document simply reports no match.
+    assert_eq!(app.mode, Mode::Normal);
+}

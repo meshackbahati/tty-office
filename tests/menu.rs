@@ -14,6 +14,10 @@ fn alt(c: char) -> KeyEvent {
     key(KeyCode::Char(c), KeyModifiers::ALT)
 }
 
+fn ctrl(c: char) -> KeyEvent {
+    key(KeyCode::Char(c), KeyModifiers::CONTROL)
+}
+
 fn plain_app() -> App {
     App::new(Document::Text(TextDocument::new()))
 }
@@ -112,4 +116,23 @@ fn menu_swallows_keys_and_esc_restores_typing() {
     app.handle_key(key(KeyCode::Esc, KeyModifiers::NONE));
     app.handle_key(key(KeyCode::Char('x'), KeyModifiers::NONE));
     assert_eq!(app.doc.text_projection(), "x");
+}
+
+#[test]
+fn menu_save_as_prefills_the_current_path() {
+    let mut app = plain_app();
+    app.handle_key(ctrl('o'));
+    for c in "tab-probe.txt".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    // File item 6 is Save As; the adopted path prefills the prompt so
+    // renaming is one edit away.
+    app.handle_key(alt('f'));
+    for _ in 0..6 {
+        app.handle_key(key(KeyCode::Down, KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.mode, Mode::Prompt(PromptKind::SaveAs));
+    assert_eq!(app.prompt_buf, "tab-probe.txt");
 }

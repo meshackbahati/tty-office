@@ -111,6 +111,84 @@ impl SheetDocument {
         reevaluate_formulas(&mut self.mirror, &mut self.cells, &cleared);
     }
 
+    /// Fill downward from the cell above the cursor, or from the top row
+    /// across a rectangular selection, shifting relative references per
+    /// row. Vacant sources leave their targets untouched. Returns the
+    /// number of cells changed.
+    pub fn fill_down(&mut self) -> usize {
+        self.fill_toward(1, 0)
+    }
+
+    /// Fill rightward from the cell to the left of the cursor, or from
+    /// the left column across a rectangular selection, shifting relative
+    /// references per column. Returns the number of cells changed.
+    pub fn fill_right(&mut self) -> usize {
+        self.fill_toward(0, 1)
+    }
+
+    /// Shared fill worker stepping (`drow`, `dcol`) per target cell.
+    fn fill_toward(&mut self, drow: usize, dcol: usize) -> usize {
+        // (source, target) pairs: each target column or row fills from
+        // its own leading cell, so one C1 formula seeds a whole column.
+        let pairs: Vec<((usize, usize), (usize, usize))> = match self.selection_rect() {
+            Some(((r0, c0), (r1, c1))) if drow > 0 && r1 > r0 => (c0..=c1)
+                .flat_map(|c| ((r0 + 1)..=r1).map(move |r| ((r0, c), (r, c))))
+                .collect(),
+            Some(((r0, c0), (r1, c1))) if dcol > 0 && c1 > c0 => (r0..=r1)
+                .flat_map(|r| ((c0 + 1)..=c1).map(move |c| ((r, c0), (r, c))))
+                .collect(),
+            _ => {
+                let (sr, sc) = (
+                    self.cursor_row.saturating_sub(drow),
+                    self.cursor_col.saturating_sub(dcol),
+                );
+                if (sr, sc) == (self.cursor_row, self.cursor_col) {
+                    return 0;
+                }
+                vec![((sr, sc), (self.cursor_row, self.cursor_col))]
+            }
+        };
+        let mut unit = Vec::with_capacity(pairs.len());
+        let mut touched = Vec::with_capacity(pairs.len());
+        for ((sr, sc), (tr, tc)) in pairs {
+            let Some(source) = self.cells.get(&(sr, sc)).cloned() else {
+                continue;
+            };
+            if source.is_vacant() {
+                continue;
+            }
+            let mut filled = source.clone();
+            if let Some(formula) = &filled.formula {
+                let shifted = super::formula::shift_formula_refs(
+                    formula,
+                    tr as i32 - sr as i32,
+                    tc as i32 - sc as i32,
+                );
+                filled.formula = Some(shifted);
+            }
+            let before = self.cells.get(&(tr, tc)).cloned();
+            if before.as_ref() == Some(&filled) {
+                continue;
+            }
+            self.cells.insert((tr, tc), filled.clone());
+            sync_cell_to_mirror(&mut self.mirror, tr, tc, Some(&filled));
+            unit.push(SheetEdit {
+                row: tr,
+                col: tc,
+                before,
+                after: Some(filled),
+            });
+            touched.push((tr, tc));
+        }
+        if unit.is_empty() {
+            return 0;
+        }
+        self.push_unit(unit);
+        self.dirty = true;
+        reevaluate_formulas(&mut self.mirror, &mut self.cells, &touched);
+        touched.len()
+    }
+
     /// Append `c` to the cell under the cursor as one undo unit. The UI
     /// normally routes typing through the CellEdit prompt; this exists so
     /// [`crate::Editor::insert_char`] has a coherent meaning on grids.

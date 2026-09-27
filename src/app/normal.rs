@@ -100,6 +100,8 @@ impl App {
                 let name = self.theme.name;
                 self.message = format!("Theme: {name}");
             }
+            Action::FillDown => self.fill_cells(true),
+            Action::FillRight => self.fill_cells(false),
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
                 let name = self.doc.display_name();
@@ -131,9 +133,18 @@ impl App {
                 }
             }
             Action::SaveAs => {
+                // Prefill with the current full path so renaming is one
+                // edit away and the directory is preserved; pathless
+                // documents fall back to the format suggestion. The
+                // prompt stays a typed line below the status bar: no
+                // file manager ever appears.
                 self.mode = Mode::Prompt(PromptKind::SaveAs);
                 self.prompt_label = "Save As: ".to_string();
-                self.prompt_buf.clear();
+                self.prompt_buf = self
+                    .doc
+                    .path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| default_save_name(&self.doc));
             }
             Action::ReadFile => {
                 self.mode = Mode::Prompt(PromptKind::ReadFile);
@@ -184,6 +195,34 @@ impl App {
                 self.message.clear();
             }
             Action::Noop => {}
+        }
+    }
+
+    /// Fill from the leading cell or edge for `FillDown` (`down`) and
+    /// `FillRight`, reporting the outcome on the message line.
+    fn fill_cells(&mut self, down: bool) {
+        let filled = match &mut self.doc {
+            crate::Document::Sheet(sheet) => {
+                if down {
+                    sheet.fill_down()
+                } else {
+                    sheet.fill_right()
+                }
+            }
+            _ => {
+                self.message = "Fill needs a spreadsheet".to_string();
+                return;
+            }
+        };
+        if filled == 0 {
+            self.message = if down {
+                "Nothing to fill from the cell above".to_string()
+            } else {
+                "Nothing to fill from the cell to the left".to_string()
+            };
+        } else {
+            let plural = if filled == 1 { "" } else { "s" };
+            self.message = format!("Filled {filled} cell{plural}");
         }
     }
 }

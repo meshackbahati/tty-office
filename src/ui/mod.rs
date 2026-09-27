@@ -375,36 +375,41 @@ fn draw_message(frame: &mut Frame<'_>, app: &App, area: Rect) {
 fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme();
     let inner_h = area.height.saturating_sub(2) as usize;
-    // The help body is the packaged KEYMAP document so prose and bindings
-    // stay in one place rather than diverging from the keymap table.
-    let body = crate::help_text();
-    let lines: Vec<Line<'static>> = body
-        .lines()
-        .take(inner_h)
-        .map(|line| {
-            if let Some(rest) = line.strip_prefix("| ") {
-                // Soften markdown table rows so the popup stays readable.
-                if rest.contains("---") && rest.chars().all(|c| matches!(c, '|' | '-' | ' ')) {
-                    return Line::from("");
-                }
-            }
-            if line.starts_with("# ") {
-                return Line::styled(
-                    line.trim_start_matches("# ").to_string(),
-                    Style::default()
-                        .fg(theme.accent)
-                        .add_modifier(Modifier::BOLD),
-                );
-            }
-            if line.starts_with("## ") {
-                return Line::styled(
-                    line.trim_start_matches("## ").to_string(),
-                    Style::default().fg(theme.accent),
-                );
-            }
-            Line::from(line.to_string())
+    // The table renders the live keymap, so rebound shortcuts show what
+    // the user actually set rather than the packaged defaults; the name
+    // column names the config key that rebinds each row.
+    let mut lines: Vec<Line<'static>> = app
+        .keymap
+        .help_rows()
+        .into_iter()
+        .map(|(chord, name, blurb)| {
+            Line::from(vec![
+                Span::styled(format!("{chord:<14}"), Style::default().fg(theme.accent)),
+                Span::styled(format!("{name:<22}"), Style::default().fg(theme.dim)),
+                Span::raw(blurb),
+            ])
         })
         .collect();
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Prompts".to_string(),
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(
+        "  Enter confirms · Esc cancels · Backspace deletes a character",
+    ));
+    lines.push(Line::from(
+        "  Menus: Alt+F/E/V/H or F10 · arrows move · Enter runs · Esc closes",
+    ));
+    lines.push(Line::from(
+        "  Rebind anything above in ~/.config/tty-office/config.toml as name = \"chord\"",
+    ));
+    lines.push(Line::from(
+        "  Quit: Ctrl+X prompts on dirty tabs · Ctrl+S saves · Ctrl+X again discards",
+    ));
+    let lines: Vec<Line<'static>> = lines.into_iter().take(inner_h).collect();
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" Help — Esc or Ctrl+G to close ")

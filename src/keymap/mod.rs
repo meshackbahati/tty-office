@@ -43,6 +43,12 @@ pub enum Action {
     ZoomReset,
     /// Step to the next display theme.
     CycleTheme,
+    /// Fill downward from the cell above or the selection top row,
+    /// shifting relative formula references per row.
+    FillDown,
+    /// Fill rightward from the cell to the left or the selection left
+    /// column, shifting relative formula references per column.
+    FillRight,
     /// Write out to the current path.
     Save,
     /// Prompt for a destination path and save there.
@@ -145,6 +151,13 @@ impl Chord {
             "delete" | "del" => KeyCode::Delete,
             "esc" | "escape" => KeyCode::Esc,
             "tab" => KeyCode::Tab,
+            fkey if (fkey.starts_with('f') || fkey.starts_with('F')) && fkey.len() > 1 => {
+                let n: u8 = fkey[1..].parse().ok()?;
+                if !(1..=24).contains(&n) {
+                    return None;
+                }
+                KeyCode::F(n)
+            }
             single if single.chars().count() == 1 => {
                 let c = single.chars().next()?;
                 KeyCode::Char(c)
@@ -183,19 +196,26 @@ impl Chord {
         key.modifiers == self.mods
     }
 
-    /// Specificity of this chord for an event: 2 for a full agreement, 1
-    /// for the shift-tolerant printable agreement `matches` also accepts,
+    /// Specificity of this chord for an event: 3 for a full agreement, 2
+    /// when exactly one of the code and the modifiers agrees exactly
+    /// (uppercase event against a lowercase chord, or SHIFT held against
+    /// a chord that omits it), 1 for the doubly tolerant agreement, and
     /// 0 for no match. Scoring lets `resolve` prefer `ctrl+shift+s` over
-    /// `ctrl+s` when SHIFT is actually held, and the reverse when it is
-    /// not, instead of whichever entry the map visits first.
+    /// `ctrl+s` when SHIFT is actually held, the reverse when it is not,
+    /// and `ctrl+shift+r` over the `ctrl+r` read-file chord on terminals
+    /// that report the uppercase event, instead of whichever entry the
+    /// map visits first.
     fn match_score(&self, key: &KeyEvent) -> u8 {
         if !self.matches(key) {
             return 0;
         }
-        if self.mods == key.modifiers {
-            return 2;
+        let code_exact = key.code == self.code;
+        let mods_exact = self.mods == key.modifiers;
+        match (code_exact, mods_exact) {
+            (true, true) => 3,
+            (true, false) | (false, true) => 2,
+            (false, false) => 1,
         }
-        1
     }
 }
 
@@ -254,21 +274,29 @@ impl Keymap {
 
     /// Default map with `~/.config/tty-office/config.toml` overrides applied.
     pub fn load_user() -> Self {
-        let mut km = Self::new();
         if let Some(path) = user_config_path() {
             if let Ok(text) = fs::read_to_string(&path) {
                 if let Ok(cfg) = toml::from_str::<Config>(&text) {
-                    for (action_name, chord_spec) in cfg.keys {
-                        if let (Some(action), Some(chord)) =
-                            (action_from_name(&action_name), Chord::parse(&chord_spec))
-                        {
-                            // Remove any prior chord bound to this action so a
-                            // rebind does not leave a ghost shortcut.
-                            km.map.retain(|_, a| a != &action);
-                            km.map.insert(chord, action);
-                        }
-                    }
+                    return Self::from_config(cfg);
                 }
+            }
+        }
+        Self::new()
+    }
+
+    /// Map with a parsed user config applied. Unknown action names and
+    /// unparseable chords skip entry by entry, so one typo cannot sink
+    /// the rest of the file.
+    pub fn from_config(cfg: Config) -> Self {
+        let mut km = Self::new();
+        for (action_name, chord_spec) in cfg.keys {
+            if let (Some(action), Some(chord)) =
+                (action_from_name(&action_name), Chord::parse(&chord_spec))
+            {
+                // Remove any prior chord bound to this action so a
+                // rebind does not leave a ghost shortcut.
+                km.map.retain(|_, a| a != &action);
+                km.map.insert(chord, action);
             }
         }
         km
@@ -326,10 +354,21 @@ impl Keymap {
 
     /// Human-readable listing for the help screen.
     pub fn help_lines(&self) -> Vec<(String, String)> {
-        let mut rows: Vec<(String, String)> = self
+        self.help_rows()
+            .into_iter()
+            .map(|(chord, _, blurb)| (chord, blurb))
+            .collect()
+    }
+
+    /// Help-screen rows as (chord, config name, description), sorted by
+    /// chord, so the overlay shows what the user actually set.
+    pub fn help_rows(&self) -> Vec<(String, &'static str, String)> {
+        let mut rows: Vec<(String, &'static str, String)> = self
             .map
             .iter()
-            .map(|(chord, action)| (format_chord(chord), describe(action)))
+            .filter_map(|(chord, action)| {
+                action_name(action).map(|name| (format_chord(chord), name, describe(action)))
+            })
             .collect();
         rows.sort();
         rows
@@ -394,6 +433,8 @@ pub fn describe(action: &Action) -> String {
         Action::ZoomOut => "Zoom out".into(),
         Action::ZoomReset => "Reset zoom".into(),
         Action::CycleTheme => "Cycle theme".into(),
+        Action::FillDown => "Fill down".into(),
+        Action::FillRight => "Fill right".into(),
         Action::Save => "Save file".into(),
         Action::SaveAs => "Save as".into(),
         Action::ReadFile => "Insert file at cursor".into(),
@@ -423,7 +464,83 @@ pub fn describe(action: &Action) -> String {
     }
 }
 
+/// Config-file name for an action, when chords can express it.
+/// Character insertions and prompt characters are structural typing
+/// rather than shortcuts, so they carry no name.
+pub fn action_name(action: &Action) -> Option<&'static str> {
+    use crate::editor::Motion;
+    use Action::*;
+    let motion_suffix = |prefix: &str, m: &Motion| -> &'static str {
+        match (prefix, m) {
+            ("move", Motion::Left) => "move_left",
+            ("move", Motion::Right) => "move_right",
+            ("move", Motion::Up) => "move_up",
+            ("move", Motion::Down) => "move_down",
+            ("move", Motion::LineStart) => "move_home",
+            ("move", Motion::LineEnd) => "move_end",
+            ("move", Motion::PageUp) => "move_page_up",
+            ("move", Motion::PageDown) => "move_page_down",
+            ("move", Motion::BufferStart) => "move_buffer_start",
+            ("move", Motion::BufferEnd) => "move_buffer_end",
+            (_, Motion::Left) => "extend_left",
+            (_, Motion::Right) => "extend_right",
+            (_, Motion::Up) => "extend_up",
+            (_, Motion::Down) => "extend_down",
+            (_, Motion::LineStart) => "extend_home",
+            (_, Motion::LineEnd) => "extend_end",
+            (_, Motion::PageUp) => "extend_page_up",
+            (_, Motion::PageDown) => "extend_page_down",
+            (_, Motion::BufferStart) => "extend_buffer_start",
+            (_, Motion::BufferEnd) => "extend_buffer_end",
+        }
+    };
+    Some(match action {
+        Exit => "exit",
+        New => "new",
+        NewText => "new_text",
+        NewSheet => "new_sheet",
+        Open => "open",
+        NextTab => "tab_next",
+        PrevTab => "tab_prev",
+        CloseTab => "close_tab",
+        ToggleSidebar => "toggle_sidebar",
+        ZoomIn => "zoom_in",
+        ZoomOut => "zoom_out",
+        ZoomReset => "zoom_reset",
+        CycleTheme => "cycle_theme",
+        FillDown => "fill_down",
+        FillRight => "fill_right",
+        Save => "save",
+        SaveAs => "save_as",
+        ReadFile => "read_file",
+        Find => "find",
+        Replace => "replace",
+        CutLine => "cut_line",
+        Uncut => "uncut",
+        ShowPosition => "show_position",
+        Help => "help",
+        Undo => "undo",
+        Redo => "redo",
+        SelectAll => "select_all",
+        ToggleBold => "toggle_bold",
+        ToggleItalic => "toggle_italic",
+        Export => "export",
+        Insert(_) => return None,
+        InsertNewline => "insert_newline",
+        Backspace => "backspace",
+        DeleteForward => "delete_forward",
+        Move(m) => motion_suffix("move", m),
+        Extend(m) => motion_suffix("extend", m),
+        Confirm => "confirm",
+        Cancel => "cancel",
+        PromptChar(_) => return None,
+        PromptBackspace => "prompt_backspace",
+        Noop => "noop",
+    })
+}
+
 fn action_from_name(name: &str) -> Option<Action> {
+    use crate::editor::Motion;
     use Action::*;
     Some(match name {
         "exit" => Exit,
@@ -439,6 +556,8 @@ fn action_from_name(name: &str) -> Option<Action> {
         "zoom_out" => ZoomOut,
         "zoom_reset" => ZoomReset,
         "cycle_theme" => CycleTheme,
+        "fill_down" => FillDown,
+        "fill_right" => FillRight,
         "save" => Save,
         "save_as" => SaveAs,
         "read_file" => ReadFile,
@@ -454,8 +573,33 @@ fn action_from_name(name: &str) -> Option<Action> {
         "toggle_bold" => ToggleBold,
         "toggle_italic" => ToggleItalic,
         "export" => Export,
+        "insert_newline" => InsertNewline,
+        "backspace" => Backspace,
+        "delete_forward" => DeleteForward,
+        "move_left" => Move(Motion::Left),
+        "move_right" => Move(Motion::Right),
+        "move_up" => Move(Motion::Up),
+        "move_down" => Move(Motion::Down),
+        "move_home" => Move(Motion::LineStart),
+        "move_end" => Move(Motion::LineEnd),
+        "move_page_up" => Move(Motion::PageUp),
+        "move_page_down" => Move(Motion::PageDown),
+        "move_buffer_start" => Move(Motion::BufferStart),
+        "move_buffer_end" => Move(Motion::BufferEnd),
+        "extend_left" => Extend(Motion::Left),
+        "extend_right" => Extend(Motion::Right),
+        "extend_up" => Extend(Motion::Up),
+        "extend_down" => Extend(Motion::Down),
+        "extend_home" => Extend(Motion::LineStart),
+        "extend_end" => Extend(Motion::LineEnd),
+        "extend_page_up" => Extend(Motion::PageUp),
+        "extend_page_down" => Extend(Motion::PageDown),
+        "extend_buffer_start" => Extend(Motion::BufferStart),
+        "extend_buffer_end" => Extend(Motion::BufferEnd),
         "confirm" => Confirm,
         "cancel" => Cancel,
+        "prompt_backspace" => PromptBackspace,
+        "noop" => Noop,
         _ => return None,
     })
 }

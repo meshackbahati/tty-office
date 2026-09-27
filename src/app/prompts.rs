@@ -8,6 +8,7 @@ use crate::editor::Editor;
 #[cfg(feature = "xlsx")]
 use crate::editor::Motion;
 use crate::io::load_rope;
+use crate::keymap::Action;
 
 use super::{App, Mode, PromptKind};
 
@@ -29,12 +30,31 @@ impl App {
             }
             return;
         }
+        // Resolved prompt actions win so confirm, cancel, and prompt
+        // backspace stay rebindable like every other shortcut; unbound
+        // keys fall through to the structural editing below, which keeps
+        // Enter, Esc, Backspace, and printable characters working when
+        // the user never rebound them.
+        match self.keymap.resolve(&key) {
+            Action::Confirm => {
+                let value = std::mem::take(&mut self.prompt_buf);
+                self.mode = Mode::Normal;
+                self.complete_prompt(kind, value);
+                return;
+            }
+            Action::Cancel => {
+                self.cancel_prompt();
+                return;
+            }
+            Action::PromptBackspace => {
+                self.prompt_buf.pop();
+                return;
+            }
+            _ => {}
+        }
         match key.code {
             KeyCode::Esc => {
-                self.mode = Mode::Normal;
-                self.prompt_buf.clear();
-                self.pending_replace.clear();
-                self.message.clear();
+                self.cancel_prompt();
             }
             KeyCode::Enter => {
                 let value = std::mem::take(&mut self.prompt_buf);
@@ -49,6 +69,15 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Dismiss the active prompt without completing it, shared by the
+    /// structural Esc key and rebound cancel chords.
+    pub(crate) fn cancel_prompt(&mut self) {
+        self.mode = Mode::Normal;
+        self.prompt_buf.clear();
+        self.pending_replace.clear();
+        self.message.clear();
     }
 
     pub(crate) fn complete_prompt(&mut self, kind: PromptKind, value: String) {

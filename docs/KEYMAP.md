@@ -3,7 +3,50 @@
 Defaults match the Nano contract plus word-processor shortcuts. User
 overrides live in `~/.config/tty-office/config.toml` as an action name mapped
 to a chord, for example `exit = "ctrl+q"`. Overrides merge with the defaults
-in this file; they do not replace the whole table.
+in this file; they do not replace the whole table. Rebinding an action
+moves its shortcut: the old chord stops working, so no ghost shortcut
+survives. The help overlay (Ctrl+G) always renders the live keymap,
+including every rebind below.
+
+## Rebinding keys
+
+Every shortcut the suite documents carries a config name. Point a name
+at a new chord to rebind it; unknown names and unparseable chords skip
+quietly so one typo cannot sink the file. Chords read like `ctrl+s`,
+`alt+f`, `shift+left`, `ctrl+pageup`, `f12`, or `ctrl+\\`. Printable
+typing and the structural prompt keys (Enter confirms, Esc cancels)
+keep working unless rebound by name.
+
+| Names |
+|-------|
+| `exit`, `new`, `new_text`, `new_sheet`, `open` |
+| `tab_next`, `tab_prev`, `close_tab`, `toggle_sidebar` |
+| `zoom_in`, `zoom_out`, `zoom_reset`, `cycle_theme` |
+| `fill_down`, `fill_right` |
+| `save`, `save_as`, `read_file`, `find`, `replace` |
+| `cut_line`, `uncut`, `show_position`, `help` |
+| `undo`, `redo`, `select_all`, `toggle_bold`, `toggle_italic`, `export` |
+| `insert_newline`, `backspace`, `delete_forward` |
+| `move_left`, `move_right`, `move_up`, `move_down` |
+| `move_home`, `move_end`, `move_page_up`, `move_page_down` |
+| `move_buffer_start`, `move_buffer_end` |
+| `extend_left`, `extend_right`, `extend_up`, `extend_down` |
+| `extend_home`, `extend_end`, `extend_page_up`, `extend_page_down` |
+| `extend_buffer_start`, `extend_buffer_end` |
+| `confirm`, `cancel`, `prompt_backspace`, `noop` |
+
+Example:
+
+```toml
+page_lines = 50
+theme = "ocean"
+
+[keys]
+exit = "ctrl+q"
+save = "f2"
+cancel = "ctrl+g"
+move_up = "ctrl+p"
+```
 
 ## Nano set
 
@@ -17,7 +60,7 @@ Ctrl+S saves. Muscle memory from VS Code transfers directly.
 | Ctrl+O | Open a file in a new tab. |
 | Ctrl+N | New tab with an untitled word document. |
 | Ctrl+S | Save; folds into Save As for a pathless document. |
-| Ctrl+Shift+S | Save As. |
+| Ctrl+Shift+S | Save As. Prefilled with the current path, so renaming is one edit away; type any path manually. |
 | Ctrl+Shift+N | New tab with an untitled text file. |
 | Ctrl+Shift+E | New tab with an untitled spreadsheet. |
 | Ctrl+R | Insert a file at the cursor. |

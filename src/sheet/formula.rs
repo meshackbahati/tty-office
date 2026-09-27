@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use super::cell::{Cell, CellValue};
+use super::cell::{col_letters, Cell, CellValue};
 
 /// Fixed mirror sheet name inside the `formualizer` evaluation workbook.
 pub(crate) const MIRROR_SHEET: &str = "Sheet";
@@ -149,6 +149,162 @@ pub(crate) fn reevaluate_formulas(
             }
         }
     }
+}
+
+/// Shift relative references in a canonical formula by (`drow`, `dcol`)
+/// for fill operations: C1 holding `=SUM(A1,B1)` filled one row down
+/// becomes `=SUM(A2,B2)`. Absolute markers pin their axis, ranges shift
+/// both endpoints, and strings, function names, foreign sheets, and
+/// anything unparseable copy through verbatim rather than corrupting.
+pub(crate) fn shift_formula_refs(formula: &str, drow: i32, dcol: i32) -> String {
+    let (body, prefix) = match formula.strip_prefix('=') {
+        Some(rest) => (rest, "="),
+        None => (formula, ""),
+    };
+    let chars: Vec<char> = body.chars().collect();
+    let mut out = String::with_capacity(body.len() + 8);
+    out.push_str(prefix);
+    let mut i = 0usize;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '"' {
+            out.push(ch);
+            i += 1;
+            while i < chars.len() && chars[i] != '"' {
+                out.push(chars[i]);
+                i += 1;
+            }
+            if i < chars.len() {
+                out.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if ch == '\'' {
+            // Quoted qualifier copies through; the reference after a
+            // local qualifier still shifts.
+            let start = i;
+            i += 1;
+            while i < chars.len() && chars[i] != '\'' {
+                i += 1;
+            }
+            i += 1;
+            let local = chars[start..i.min(chars.len())]
+                .iter()
+                .collect::<String>()
+                .eq_ignore_ascii_case(&format!("'{MIRROR_SHEET}'"));
+            out.push_str(&chars[start..i.min(chars.len())].iter().collect::<String>());
+            if chars.get(i) == Some(&'!') {
+                out.push('!');
+                i += 1;
+            }
+            if !local {
+                // Foreign reference: copy the following token verbatim.
+                while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '$') {
+                    out.push(chars[i]);
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if ch.is_ascii_alphabetic() || ch == '$' {
+            let follows_number = i > 0 && (chars[i - 1].is_ascii_digit() || chars[i - 1] == '.');
+            let start = i;
+            while i < chars.len()
+                && (chars[i].is_ascii_alphanumeric() || matches!(chars[i], '.' | '$' | '_'))
+            {
+                i += 1;
+            }
+            let word: String = chars[start..i].iter().collect();
+            if follows_number || chars.get(i) == Some(&'(') || word == "TRUE" || word == "FALSE" {
+                out.push_str(&word);
+                continue;
+            }
+            if chars.get(i) == Some(&'!') {
+                // Sheet qualifier: shift only after the local sheet.
+                out.push_str(&word);
+                out.push('!');
+                i += 1;
+                if word.eq_ignore_ascii_case(MIRROR_SHEET) {
+                    continue;
+                }
+                while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '$') {
+                    out.push(chars[i]);
+                    i += 1;
+                }
+                continue;
+            }
+            match shift_single_ref(&word, drow, dcol) {
+                Some(shifted) => {
+                    out.push_str(&shifted);
+                    if chars.get(i) == Some(&':') {
+                        out.push(':');
+                        i += 1;
+                        let second = i;
+                        while i < chars.len()
+                            && (chars[i].is_ascii_alphanumeric() || chars[i] == '$')
+                        {
+                            i += 1;
+                        }
+                        let word2: String = chars[second..i].iter().collect();
+                        out.push_str(&shift_single_ref(&word2, drow, dcol).unwrap_or(word2));
+                    }
+                }
+                None => out.push_str(&word),
+            }
+            continue;
+        }
+        out.push(ch);
+        i += 1;
+    }
+    out
+}
+
+/// Shift one `A1` reference, preserving absolute markers; returns `None`
+/// when the token is not a plain reference.
+fn shift_single_ref(word: &str, drow: i32, dcol: i32) -> Option<String> {
+    let mut chars = word.chars().peekable();
+    let col_abs = chars.peek() == Some(&'$');
+    if col_abs {
+        chars.next();
+    }
+    let mut letters = String::new();
+    while let Some(&c) = chars.peek() {
+        if c.is_ascii_alphabetic() {
+            letters.push(c);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    let row_abs = chars.peek() == Some(&'$');
+    if row_abs {
+        chars.next();
+    }
+    let digits: String = chars.collect();
+    if letters.is_empty() || letters.len() > 3 || digits.is_empty() {
+        return None;
+    }
+    if !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let mut col = 0usize;
+    for c in letters.chars() {
+        col = col * 26 + (c.to_ascii_uppercase() as usize - 'A' as usize) + 1;
+    }
+    let row: usize = digits.parse().ok()?;
+    let col = (col as i32 + if col_abs { 0 } else { dcol }).max(1) as usize;
+    let row = (row as i32 + if row_abs { 0 } else { drow }).max(1) as usize;
+    let mut out = String::new();
+    if col_abs {
+        out.push('$');
+    }
+    out.push_str(&col_letters(col - 1));
+    if row_abs {
+        out.push('$');
+    }
+    out.push_str(&row.to_string());
+    Some(out)
 }
 
 /// Parse one `A1` reference into zero-based `(col, row)`, accepting
@@ -508,6 +664,27 @@ mod tests {
         assert_eq!(formula_precedents("=MyName+1"), None);
         assert_eq!(formula_precedents("=SUM(A:A)"), None);
         assert_eq!(formula_precedents("=Table1[Col]+1"), None);
+    }
+
+    #[test]
+    fn shift_moves_relative_refs_per_row_and_column() {
+        // The reported case: C1 holding =SUM(A1,B1) filled one row down.
+        assert_eq!(shift_formula_refs("=SUM(A1,B1)", 1, 0), "=SUM(A2,B2)");
+        assert_eq!(
+            shift_formula_refs("=$A$1+$B2+C$3+D4", 1, 1),
+            "=$A$1+$B3+D$3+E5"
+        );
+    }
+
+    #[test]
+    fn shift_copies_strings_foreign_sheets_and_names_verbatim() {
+        assert_eq!(
+            shift_formula_refs("=IF(A1>5,\"A9\",\"x\")", 2, 0),
+            "=IF(A3>5,\"A9\",\"x\")"
+        );
+        assert_eq!(shift_formula_refs("=Other!A1+A2", 1, 0), "=Other!A1+A3");
+        assert_eq!(shift_formula_refs("=1E5+A1", 1, 1), "=1E5+B2");
+        assert_eq!(shift_formula_refs("A1+1", 1, 0), "A2+1");
     }
 
     #[test]

@@ -30,6 +30,12 @@ pub(crate) fn default_bindings() -> Vec<(Chord, Action)> {
         (Chord::new(K::Char('-'), m), Action::ZoomOut),
         (Chord::new(K::Char('0'), m), Action::ZoomReset),
         (Chord::new(K::Char('t'), a), Action::CycleTheme),
+        (Chord::new(K::Char('d'), m), Action::FillDown),
+        // Uppercase without a SHIFT flag: terminals that report Shift
+        // with Ctrl deliver the shifted fill chord, while legacy ones
+        // deliver plain Ctrl+R, which keeps opening the read-file
+        // prompt. Resolution scoring keeps the two deterministic.
+        (Chord::new(K::Char('R'), m), Action::FillRight),
         (Chord::new(K::F(4), m), Action::CloseTab),
         (Chord::new(K::PageDown, m), Action::NextTab),
         (Chord::new(K::PageUp, m), Action::PrevTab),

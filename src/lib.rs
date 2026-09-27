@@ -43,7 +43,7 @@ pub use editor::{Cursor, Editor, Motion};
 pub use error::DocumentError;
 pub use headless::{cat_text, convert_files, info_text};
 pub use history::History;
-pub use keymap::{format_chord, Action, Chord, Keymap};
+pub use keymap::{action_name, format_chord, Action, Chord, Config, Keymap};
 pub use page::PageLayout;
 pub use print::{export, ExportFormat};
 #[cfg(feature = "proof")]
