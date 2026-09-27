@@ -3,16 +3,11 @@
 
 #![cfg(feature = "docx")]
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::TestBackend;
 use ratatui::style::Modifier;
 use ratatui::Terminal;
 use tempfile::TempDir;
 use tty_office::{draw, App, Document};
-
-fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
-    KeyEvent::new(code, mods)
-}
 
 fn styled_path(dir: &TempDir) -> std::path::PathBuf {
     let path = dir.path().join("styles.docx");

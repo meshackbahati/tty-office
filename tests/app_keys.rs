@@ -368,9 +368,7 @@ fn ctrl_shift_arrows_select_by_word() {
 
 #[test]
 fn alt_page_keys_jump_between_page_starts() {
-    let cursor_line_of = |app: &mut App| {
-        app.doc.prose_surface().expect("surface").cursor_line()
-    };
+    let cursor_line_of = |app: &mut App| app.doc.prose_surface().expect("surface").cursor_line();
     let mut app = plain_app();
     app.doc.insert_str(&"line\n".repeat(120));
     // Insertion leaves the caret at the end, on page 3.
