@@ -345,8 +345,11 @@ impl App {
     }
 
     pub(crate) fn do_save(&mut self, path: Option<&Path>) {
+        // Saving under a name converts across families when the
+        // extension demands it and exports for PDFs; saving in place
+        // keeps the current writer.
         let result = match path {
-            Some(p) => self.doc.save_as(p),
+            Some(p) => self.doc.save_as_convert(p),
             None => self.doc.save(None),
         };
         match result {

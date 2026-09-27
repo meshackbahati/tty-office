@@ -59,7 +59,7 @@ pub fn info_text(file: &Path) -> Result<String, DocumentError> {
 /// interface uses.
 pub fn convert_files(input: &Path, output: &Path) -> Result<String, DocumentError> {
     let mut doc = crate::open(input)?;
-    doc.save_as(output)?;
+    doc.save_as_convert(output)?;
     Ok(format!(
         "Converted {} to {}\n",
         input.display(),

@@ -147,6 +147,121 @@ impl Document {
             _ => None,
         }
     }
+
+    /// Family of this document for conversion routing.
+    fn kind(&self) -> Kind {
+        match self {
+            Document::Text(_) => Kind::Text,
+            #[cfg(feature = "docx")]
+            Document::Rich(_) => Kind::Rich,
+            #[cfg(feature = "xlsx")]
+            Document::Sheet(_) => Kind::Sheet,
+        }
+    }
+
+    /// Save to `target`, converting across families when the extension
+    /// demands it and exporting when it names a PDF. Same-family saves
+    /// keep the existing writers; unknown extensions fall through to
+    /// them so their refusal messages stay specific. On a converting
+    /// save the buffer itself becomes the target kind, so further
+    /// edits and saves behave like a natively opened file.
+    pub fn save_as_convert(&mut self, target: &Path) -> Result<(), DocumentError> {
+        use crate::editor::Editor;
+        let ext = target
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if ext.as_str() == "pdf" {
+            return crate::print::export(self, target);
+        }
+        match kind_of_ext(ext.as_str()) {
+            Some(want) if want == self.kind() => self.save_as(target),
+            Some(_) => {
+                let text = self.text_projection();
+                let mut fresh = fresh_doc_for_ext(ext.as_str())?;
+                match &mut fresh {
+                    Document::Text(_) => {
+                        fresh.insert_str(&text);
+                    }
+                    #[cfg(feature = "docx")]
+                    Document::Rich(_) => {
+                        fresh.insert_str(&text);
+                    }
+                    #[cfg(feature = "xlsx")]
+                    Document::Sheet(sheet) => {
+                        use crate::editor::Motion;
+                        sheet.move_cursor(Motion::BufferStart, false);
+                        let mut first = true;
+                        for line in text.lines() {
+                            if !first {
+                                sheet.move_cursor(Motion::Down, false);
+                            }
+                            first = false;
+                            sheet.set_cell_content(line);
+                        }
+                    }
+                }
+                fresh.save_as(target)?;
+                *self = fresh;
+                Ok(())
+            }
+            None => self.save_as(target),
+        }
+    }
+}
+
+/// Document family for conversion routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Text,
+    Rich,
+    Sheet,
+}
+
+/// Family implied by a path extension, if any.
+fn kind_of_ext(ext: &str) -> Option<Kind> {
+    match ext {
+        "txt" | "md" | "markdown" => Some(Kind::Text),
+        #[cfg(feature = "docx")]
+        "docx" | "odt" => Some(Kind::Rich),
+        #[cfg(feature = "xlsx")]
+        "xlsx" | "ods" | "xls" | "csv" => Some(Kind::Sheet),
+        _ => None,
+    }
+}
+
+/// Empty document of the family an extension names, for conversions.
+fn fresh_doc_for_ext(ext: &str) -> Result<Document, DocumentError> {
+    match ext {
+        "txt" | "md" | "markdown" => Ok(Document::Text(TextDocument::new())),
+        #[cfg(feature = "docx")]
+        "docx" => Ok(Document::Rich(Box::new(crate::RichDocument::new(
+            crate::RichFormat::Docx,
+        )))),
+        #[cfg(feature = "docx")]
+        "odt" => Ok(Document::Rich(Box::new(crate::RichDocument::new(
+            crate::RichFormat::Odt,
+        )))),
+        #[cfg(feature = "xlsx")]
+        "xlsx" => Ok(Document::Sheet(Box::new(crate::SheetDocument::new(
+            crate::SheetFormat::Xlsx,
+        )))),
+        #[cfg(feature = "xlsx")]
+        "ods" => Ok(Document::Sheet(Box::new(crate::SheetDocument::new(
+            crate::SheetFormat::Ods,
+        )))),
+        #[cfg(feature = "xlsx")]
+        "csv" => Ok(Document::Sheet(Box::new(crate::SheetDocument::new(
+            crate::SheetFormat::Csv,
+        )))),
+        #[cfg(feature = "xlsx")]
+        "xls" => Ok(Document::Sheet(Box::new(crate::SheetDocument::new(
+            crate::SheetFormat::Xls,
+        )))),
+        _ => Err(DocumentError::UnsupportedFormat(format!(
+            "cannot convert to .{ext}"
+        ))),
+    }
 }
 
 impl Editor for Document {

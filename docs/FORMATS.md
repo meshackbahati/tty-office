@@ -31,6 +31,15 @@ text without layout; the buffer carries no path, so saving a viewed
 PDF always passes through Save As instead of overwriting the file
 with plain text.
 
+Saving under a mismatched extension converts instead of mislabeling:
+text, word, and sheet content rewrite into the destination family, and
+`.pdf` destinations export. Spreadsheet formulas flatten to their
+displayed values when leaving the grid, since text has no evaluator.
+Bare file names gain the current document extension first, so `budget`
+saves as `budget.xlsx` for a spreadsheet. Direct writers still refuse
+unwritable pairings (`.xls` output, unknown extensions) with a message
+instead of guessing.
+
 Round-trip fidelity follows one rule throughout: content the editor does
 not model is preserved rather than rewritten. Paragraphs of a rich
 document that contain drawings, equations, or hyperlink runs are refused

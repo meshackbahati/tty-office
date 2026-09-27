@@ -99,15 +99,25 @@ fn undo_after_save_restores_pre_save_text() {
 }
 
 #[test]
-fn save_as_txt_refuses_for_word_documents() {
+fn save_as_txt_converts_word_to_text() {
     use tty_office::DocumentError;
 
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("roundtrip.docx");
     let mut doc = open(&path).expect("open new rich path");
     doc.insert_str("words");
-    let err = doc
-        .save_as(&dir.path().join("words.txt"))
+    // Saving word content under a text name converts instead of
+    // mislabeling package bytes.
+    doc.save_as_convert(&dir.path().join("words.txt"))
+        .expect("convert to text");
+    assert!(matches!(doc, Document::Text(_)));
+    let back = std::fs::read_to_string(dir.path().join("words.txt")).expect("read back");
+    assert_eq!(back, "words");
+    // The direct writer still refuses mismatched extensions loudly.
+    let mut direct = open(&path).expect("open new rich path");
+    direct.insert_str("words");
+    let err = direct
+        .save_as(&dir.path().join("direct.txt"))
         .expect_err("txt save must refuse");
     match err {
         DocumentError::Save { message, .. } => {
@@ -118,8 +128,7 @@ fn save_as_txt_refuses_for_word_documents() {
         }
         other => panic!("wrong error: {other:?}"),
     }
-    // Nothing was written under the refused name.
-    assert!(!dir.path().join("words.txt").exists());
+    assert!(!dir.path().join("direct.txt").exists());
 }
 
 #[test]
