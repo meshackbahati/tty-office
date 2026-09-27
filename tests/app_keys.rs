@@ -309,3 +309,22 @@ fn rebound_confirm_chord_confirms_prompts() {
     // The prompt closes; the empty document simply reports no match.
     assert_eq!(app.mode, Mode::Normal);
 }
+
+#[test]
+fn prompt_arrows_edit_within_the_buffer() {
+    let mut app = plain_app();
+    app.handle_key(ctrl('f'));
+    for c in "ac".chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Left, KeyModifiers::NONE));
+    app.handle_key(key(KeyCode::Char('b'), KeyModifiers::NONE));
+    assert_eq!(app.prompt_buf, "abc");
+    app.handle_key(key(KeyCode::Backspace, KeyModifiers::NONE));
+    assert_eq!(app.prompt_buf, "ac");
+    app.handle_key(key(KeyCode::Home, KeyModifiers::NONE));
+    app.handle_key(key(KeyCode::Char('z'), KeyModifiers::NONE));
+    app.handle_key(key(KeyCode::End, KeyModifiers::NONE));
+    app.handle_key(key(KeyCode::Char('y'), KeyModifiers::NONE));
+    assert_eq!(app.prompt_buf, "zacy");
+}

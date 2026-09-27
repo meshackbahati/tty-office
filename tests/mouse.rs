@@ -147,3 +147,33 @@ fn sheet_click_and_drag_select_cells() {
     };
     assert_eq!(rect, Some(((0, 0), (1, 1))));
 }
+
+#[test]
+#[cfg(feature = "xlsx")]
+fn sheet_grid_shows_the_cell_caret() {
+    use tty_office::{SheetDocument, SheetFormat};
+    let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
+    let mut app = App::new(doc);
+    // Narrow frame hides the sidebar: gutter 6 plus one border column
+    // puts the first cell content at column 7, header row 1.
+    let backend = TestBackend::new(50, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    term.backend_mut().assert_cursor_position((7, 3));
+}
+
+#[test]
+#[cfg(feature = "xlsx")]
+fn cell_edit_shows_the_caret_inside_the_echo() {
+    use tty_office::{SheetDocument, SheetFormat};
+    let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
+    let mut app = App::new(doc);
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    for c in "hi".chars() {
+        app.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    let backend = TestBackend::new(50, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    term.backend_mut().assert_cursor_position((9, 3));
+}

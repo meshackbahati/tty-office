@@ -10,6 +10,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
+use unicode_width::UnicodeWidthStr;
 
 use crate::app::{App, Mode, PromptKind};
 
@@ -128,6 +129,22 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             .border_style(Style::default().fg(theme.dim)),
     );
     frame.render_widget(paragraph, area);
+
+    // Place the terminal cursor on the cursor cell, or inside the echoed
+    // edit while a cell prompt is open, so typing shows its caret.
+    if cursor_col >= coloff && cursor_row >= rowoff {
+        let x = area.x + ROW_GUTTER as u16 + ((cursor_col - coloff) * CELL_STRIDE) as u16 + 1;
+        let y = area.y + 2 + ((cursor_row - rowoff) * 2) as u16;
+        if x < area.x + area.width && y < area.y + area.height {
+            if matches!(app.mode, Mode::Prompt(PromptKind::CellEdit)) {
+                let prefix: String = app.prompt_buf.chars().take(app.prompt_cursor).collect();
+                let w = prefix.width().min(CELL_WIDTH - 1) as u16;
+                frame.set_cursor_position((x + w, y));
+            } else {
+                frame.set_cursor_position((x, y));
+            }
+        }
+    }
 }
 
 /// Horizontal grid rule: gutter dashes plus one joint per column.

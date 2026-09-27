@@ -116,6 +116,8 @@ pub struct App {
     pub mode: Mode,
     /// Active prompt buffer.
     pub prompt_buf: String,
+    /// Character offset of the prompt caret within the buffer.
+    pub(crate) prompt_cursor: usize,
     /// Label shown to the left of the prompt buffer.
     pub prompt_label: String,
     /// Cutbuffer for Nano-style cut and paste.
@@ -162,6 +164,7 @@ impl App {
             should_quit: false,
             mode: Mode::Normal,
             prompt_buf: String::new(),
+            prompt_cursor: 0,
             prompt_label: String::new(),
             cutbuffer: String::new(),
             last_find: String::new(),

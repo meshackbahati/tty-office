@@ -75,9 +75,7 @@ impl App {
                 }
             }
             Action::Open => {
-                self.mode = Mode::Prompt(PromptKind::OpenFile);
-                self.prompt_label = "Open: ".to_string();
-                self.prompt_buf.clear();
+                self.open_prompt(PromptKind::OpenFile, "Open: ", String::new());
                 self.message = "Enter a file to open in a new tab".to_string();
             }
             Action::NextTab => self.next_tab(),
@@ -124,9 +122,11 @@ impl App {
                     // Without a path there is nothing to write to; the
                     // file name is the only missing input, so the save
                     // folds into Save As the way graphical editors do.
-                    self.mode = Mode::Prompt(PromptKind::SaveAs);
-                    self.prompt_label = "Save As: ".to_string();
-                    self.prompt_buf = default_save_name(&self.doc);
+                    self.open_prompt(
+                        PromptKind::SaveAs,
+                        "Save As: ",
+                        default_save_name(&self.doc),
+                    );
                     self.message = "Enter a file name for this document".to_string();
                 } else {
                     self.do_save(None);
@@ -138,28 +138,22 @@ impl App {
                 // documents fall back to the format suggestion. The
                 // prompt stays a typed line below the status bar: no
                 // file manager ever appears.
-                self.mode = Mode::Prompt(PromptKind::SaveAs);
-                self.prompt_label = "Save As: ".to_string();
-                self.prompt_buf = self
+                let prefill = self
                     .doc
                     .path()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|| default_save_name(&self.doc));
+                self.open_prompt(PromptKind::SaveAs, "Save As: ", prefill);
             }
             Action::ReadFile => {
-                self.mode = Mode::Prompt(PromptKind::ReadFile);
-                self.prompt_label = "Insert File: ".to_string();
-                self.prompt_buf.clear();
+                self.open_prompt(PromptKind::ReadFile, "Insert File: ", String::new());
             }
             Action::Find => {
-                self.mode = Mode::Prompt(PromptKind::Find);
-                self.prompt_label = "Where Is: ".to_string();
-                self.prompt_buf = self.last_find.clone();
+                let needle = self.last_find.clone();
+                self.open_prompt(PromptKind::Find, "Where Is: ", needle);
             }
             Action::Replace => {
-                self.mode = Mode::Prompt(PromptKind::ReplaceFind);
-                self.prompt_label = "Replace: ".to_string();
-                self.prompt_buf.clear();
+                self.open_prompt(PromptKind::ReplaceFind, "Replace: ", String::new());
             }
             Action::CutLine => self.cut_line(),
             Action::Uncut => self.doc.insert_str(&self.cutbuffer.clone()),
@@ -187,9 +181,8 @@ impl App {
             Action::ToggleBold => self.wrap_selection("**"),
             Action::ToggleItalic => self.wrap_selection("*"),
             Action::Export => {
-                self.mode = Mode::Prompt(PromptKind::Export);
-                self.prompt_label = "Export to: ".to_string();
-                self.prompt_buf = self.export_suggestion();
+                let suggestion = self.export_suggestion();
+                self.open_prompt(PromptKind::Export, "Export to: ", suggestion);
             }
             Action::Confirm | Action::Cancel | Action::PromptChar(_) | Action::PromptBackspace => {
                 self.message.clear();

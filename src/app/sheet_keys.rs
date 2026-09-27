@@ -5,7 +5,7 @@ use crossterm::event::KeyEvent;
 use crate::editor::{Editor, Motion};
 use crate::keymap::Action;
 
-use super::{App, Mode, PromptKind};
+use super::{App, PromptKind};
 
 impl App {
     pub(crate) fn is_sheet(&self) -> bool {
@@ -26,9 +26,7 @@ impl App {
                     }
                     None => (String::new(), "Cell: ".to_string()),
                 };
-                self.mode = Mode::Prompt(PromptKind::CellEdit);
-                self.prompt_label = label;
-                self.prompt_buf = prefill;
+                self.open_prompt(PromptKind::CellEdit, &label, prefill);
                 true
             }
             Action::Insert('\t') => {
@@ -36,9 +34,7 @@ impl App {
                 true
             }
             Action::Insert(c) if !c.is_control() => {
-                self.mode = Mode::Prompt(PromptKind::CellEdit);
-                self.prompt_label = "Cell: ".to_string();
-                self.prompt_buf = c.to_string();
+                self.open_prompt(PromptKind::CellEdit, "Cell: ", c.to_string());
                 true
             }
             Action::Backspace | Action::DeleteForward => {

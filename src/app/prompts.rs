@@ -52,6 +52,9 @@ impl App {
             }
             _ => {}
         }
+        // Clamp the caret: entries set it, and the edits below keep it
+        // inside the buffer.
+        self.prompt_cursor = self.prompt_cursor.min(self.prompt_buf.chars().count());
         match key.code {
             KeyCode::Esc => {
                 self.cancel_prompt();
@@ -62,10 +65,28 @@ impl App {
                 self.complete_prompt(kind, value);
             }
             KeyCode::Backspace => {
-                self.prompt_buf.pop();
+                if self.prompt_cursor > 0 {
+                    self.prompt_cursor -= 1;
+                    let at = byte_idx(&self.prompt_buf, self.prompt_cursor);
+                    self.prompt_buf.remove(at);
+                }
+            }
+            KeyCode::Left if key.modifiers.is_empty() => {
+                self.prompt_cursor = self.prompt_cursor.saturating_sub(1);
+            }
+            KeyCode::Right if key.modifiers.is_empty() => {
+                self.prompt_cursor = (self.prompt_cursor + 1).min(self.prompt_buf.chars().count());
+            }
+            KeyCode::Home if key.modifiers.is_empty() => {
+                self.prompt_cursor = 0;
+            }
+            KeyCode::End if key.modifiers.is_empty() => {
+                self.prompt_cursor = self.prompt_buf.chars().count();
             }
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.prompt_buf.push(c);
+                let at = byte_idx(&self.prompt_buf, self.prompt_cursor);
+                self.prompt_buf.insert(at, c);
+                self.prompt_cursor += 1;
             }
             _ => {}
         }
@@ -80,6 +101,16 @@ impl App {
         self.message.clear();
     }
 
+    /// Open a line prompt with the caret at the end of the buffer, so
+    /// every entry point positions the caret identically.
+    pub(crate) fn open_prompt(&mut self, kind: PromptKind, label: &str, buf: String) {
+        self.mode = Mode::Prompt(kind);
+        self.prompt_label = label.to_string();
+        self.prompt_buf = buf;
+        self.prompt_cursor = self.prompt_buf.chars().count();
+    }
+
+    /// Byte index of the `char_idx`-th character, for caret edits.
     pub(crate) fn complete_prompt(&mut self, kind: PromptKind, value: String) {
         match kind {
             PromptKind::SaveAs => {
@@ -139,9 +170,7 @@ impl App {
                     return;
                 }
                 self.last_find = value;
-                self.mode = Mode::Prompt(PromptKind::ReplaceText);
-                self.prompt_label = "Replace with: ".to_string();
-                self.prompt_buf.clear();
+                self.open_prompt(PromptKind::ReplaceText, "Replace with: ", String::new());
             }
             PromptKind::ReplaceText => {
                 self.replace_with = value;
@@ -217,11 +246,13 @@ impl App {
             return;
         }
         self.pending_replace = spans;
-        self.mode = Mode::Prompt(PromptKind::ReplaceConfirm);
-        self.prompt_label = "Replace preview: ".to_string();
-        self.prompt_buf = format!(
-            "{} occurrence(s): '{needle}' -> '{replacement}'",
-            self.pending_replace.len()
+        self.open_prompt(
+            PromptKind::ReplaceConfirm,
+            "Replace preview: ",
+            format!(
+                "{} occurrence(s): '{needle}' -> '{replacement}'",
+                self.pending_replace.len()
+            ),
         );
         self.message = "Enter to apply, Esc to cancel".to_string();
     }
@@ -243,4 +274,13 @@ impl App {
         }
         self.message = format!("Replaced {count} occurrence(s)");
     }
+}
+
+/// Byte index of the `char_idx`-th character in a prompt buffer, for
+/// caret edits that must land on character boundaries.
+fn byte_idx(buf: &str, char_idx: usize) -> usize {
+    buf.char_indices()
+        .nth(char_idx)
+        .map(|(i, _)| i)
+        .unwrap_or(buf.len())
 }

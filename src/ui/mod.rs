@@ -21,7 +21,7 @@ use ratatui::Frame;
 use unicode_width::UnicodeWidthChar;
 
 use crate::app::sidebar::{MIN_WIDTH_FOR_SIDEBAR, SIDEBAR_WIDTH};
-use crate::app::{App, Mode, ViewRects};
+use crate::app::{App, Mode, PromptKind, ViewRects};
 use crate::page::PageLayout;
 use crate::Theme;
 
@@ -370,6 +370,17 @@ fn draw_message(frame: &mut Frame<'_>, app: &App, area: Rect) {
         )
     };
     frame.render_widget(Paragraph::new(Line::from(content)), area);
+    // The caret follows the prompt text, except while a cell edit shows
+    // it inside the grid instead.
+    if let Mode::Prompt(kind) = &app.mode {
+        if !matches!(kind, PromptKind::CellEdit) {
+            use unicode_width::UnicodeWidthStr;
+            let prefix: String = app.prompt_buf.chars().take(app.prompt_cursor).collect();
+            let at = 1 + app.prompt_label.width() + prefix.width();
+            let x = (area.x + at as u16).min(area.x + area.width.saturating_sub(1));
+            frame.set_cursor_position((x, area.y));
+        }
+    }
 }
 
 fn draw_help(frame: &mut Frame<'_>, app: &App, area: Rect) {
