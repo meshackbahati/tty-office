@@ -42,6 +42,16 @@ pub enum Mode {
     Browse,
 }
 
+/// Which chrome section owns single-key navigation. The text pane is
+/// the default; F6 toggles the sidebar, and Esc always returns to text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Focus {
+    /// Document editing; all keys reach the buffer.
+    Text,
+    /// Sidebar rows; arrows move, Enter activates.
+    Sidebar,
+}
+
 /// Which completion path a line prompt should take on Enter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -106,6 +116,10 @@ pub struct App {
     drag: Option<mouse::DragOrigin>,
     /// File browser session while the overlay owns the keyboard.
     pub(crate) browse: Option<browse::BrowseState>,
+    /// Section owning single-key navigation.
+    pub(crate) focus: Focus,
+    /// Highlighted sidebar row while the sidebar is focused.
+    pub(crate) side_sel: usize,
     /// Display zoom: extra blank rows per text line, up to MAX_ZOOM.
     zoom: u8,
     /// Accent palette for chrome; cycled by chord, set by config.
@@ -163,6 +177,8 @@ impl App {
             view: ViewRects::default(),
             drag: None,
             browse: None,
+            focus: Focus::Text,
+            side_sel: 0,
             zoom: 0,
             keymap: Keymap::load_user(),
             message: String::new(),

@@ -139,7 +139,11 @@ fn save_as_bare_name_gains_the_document_extension() {
         app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
-    assert!(app.message.starts_with("Wrote "), "message: {}", app.message);
+    assert!(
+        app.message.starts_with("Wrote "),
+        "message: {}",
+        app.message
+    );
     assert!(dir.path().join("budget.docx").is_file());
     assert!(!dir.path().join("budget").exists());
 }

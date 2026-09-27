@@ -18,19 +18,29 @@ use crate::app::App;
 pub(super) fn draw_sidebar(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme();
     let width = area.width as usize;
+    let focused = app.focus == crate::app::Focus::Sidebar;
     let lines: Vec<Line<'static>> = rows(app)
         .into_iter()
         .take(area.height as usize)
-        .map(|row| {
+        .enumerate()
+        .map(|(idx, row)| {
             let mut text = format!(" {}", row.label);
             while text.width() > width.saturating_sub(1) {
                 text.pop();
             }
+            let highlight = focused && idx == app.side_sel;
             let style = match row.kind {
                 RowKind::Header => Style::default().fg(theme.dim),
                 RowKind::Tab(i) if i == app.active_tab() => {
-                    Style::default().add_modifier(Modifier::REVERSED)
+                    let mut style = Style::default().add_modifier(Modifier::REVERSED);
+                    if highlight {
+                        style = style.add_modifier(Modifier::BOLD);
+                    }
+                    style
                 }
+                _ if highlight => Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
                 _ => Style::default(),
             };
             Line::from(Span::styled(text, style))

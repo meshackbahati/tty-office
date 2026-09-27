@@ -101,6 +101,7 @@ impl App {
         if view.side_w > 0 && y >= view.text_y && x >= view.side_x && x < view.side_x + view.side_w
         {
             if self.mode == Mode::Normal {
+                self.focus = super::Focus::Sidebar;
                 let list = rows(self);
                 let rel = (y - view.text_y) as usize;
                 if let Some(row) = list.get(rel) {
@@ -317,6 +318,7 @@ impl App {
     /// Press on prose: place the caret and remember the drag origin.
     fn prose_press(&mut self, x: u16, y: u16) {
         if let Some((line, seg, col)) = self.prose_position(x, y) {
+            self.focus = super::Focus::Text;
             if let Some(surface) = self.doc.prose_surface() {
                 let width = (self.view.text_w as usize).saturating_sub(2).max(1);
                 if surface.wrap_enabled() {
@@ -428,6 +430,7 @@ impl App {
             return;
         }
         if let Some((r, c)) = self.sheet_cell_at(x, y) {
+            self.focus = super::Focus::Text;
             if let Document::Sheet(sheet) = &mut self.doc {
                 sheet.click_cell(r, c);
             }

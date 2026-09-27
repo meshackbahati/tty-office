@@ -12,11 +12,50 @@ use super::{App, Mode, PromptKind};
 
 impl App {
     pub(crate) fn handle_normal(&mut self, key: KeyEvent) {
+        // F6 toggles section focus everywhere in normal mode.
+        if key.code == KeyCode::F(6) && key.modifiers.is_empty() {
+            self.cycle_focus();
+            return;
+        }
         // A dropdown menu owns the keyboard while open; every key either
         // navigates it or dismisses it, so typing can never leak through.
         if self.open_menu.is_some() {
             self.handle_menu_key(key);
             return;
+        }
+        // A focused sidebar owns the navigation keys; anything else
+        // returns focus to the text and still reaches the document, so
+        // no keystroke is ever swallowed.
+        if self.focus == super::Focus::Sidebar {
+            match key.code {
+                KeyCode::Up if key.modifiers.is_empty() => {
+                    self.side_move(-1);
+                    return;
+                }
+                KeyCode::Down if key.modifiers.is_empty() => {
+                    self.side_move(1);
+                    return;
+                }
+                KeyCode::Home if key.modifiers.is_empty() => {
+                    self.side_home();
+                    return;
+                }
+                KeyCode::End if key.modifiers.is_empty() => {
+                    self.side_end();
+                    return;
+                }
+                KeyCode::Enter if key.modifiers.is_empty() => {
+                    self.sidebar_activate();
+                    return;
+                }
+                KeyCode::Esc => {
+                    self.focus = super::Focus::Text;
+                    return;
+                }
+                _ => {
+                    self.focus = super::Focus::Text;
+                }
+            }
         }
         // Alt+letter and F10 pull down a menu without touching the keymap.
         if let Some(menu) = Self::menu_hotkey(&key) {
@@ -98,6 +137,7 @@ impl App {
                 let name = self.theme.name;
                 self.message = format!("Theme: {name}");
             }
+            Action::FocusNext => self.cycle_focus(),
             Action::FillDown => self.sheet_fill(true),
             Action::FillRight => self.sheet_fill(false),
             Action::OpenLink => self.open_link(),

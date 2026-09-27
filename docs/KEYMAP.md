@@ -21,6 +21,7 @@ keep working unless rebound by name.
 |-------|
 | `exit`, `new`, `new_text`, `new_sheet`, `open` |
 | `tab_next`, `tab_prev`, `close_tab`, `toggle_sidebar` |
+| `focus_next` |
 | `zoom_in`, `zoom_out`, `zoom_reset`, `cycle_theme` |
 | `fill_down`, `fill_right` |
 | `save`, `save_as`, `read_file`, `find`, `replace` |
@@ -77,6 +78,7 @@ Ctrl+S saves. Muscle memory from VS Code transfers directly.
 | Ctrl+C | Show line, column, word count, and modified state. |
 | Ctrl+G | Get help. Esc or Ctrl+G closes the help overlay. |
 | Ctrl+B | Show or hide the sidebar. |
+| F6 | Toggle keyboard focus between the text and the sidebar. |
 
 ## Word-processor set
 
@@ -180,6 +182,12 @@ The sidebar lists file creation entries for every format, common
 commands, and the open tabs. Ctrl+B toggles it, and terminals
 narrower than 60 columns hide it to protect the text pane. Every
 entry mirrors a menu or key action; clicking a tab jumps to it.
+
+F6 toggles keyboard focus between the text and the sidebar. While
+focused, Up and Down move the highlight across actionable rows,
+Home and End jump, Enter activates, and Esc returns to the text;
+any other key returns focus and still reaches the document, so no
+keystroke is ever swallowed. Clicking the sidebar focuses it too.
 
 ## File browser
 

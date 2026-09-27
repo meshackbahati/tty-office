@@ -97,6 +97,66 @@ fn entry(label: &str, kind: RowKind) -> SidebarRow {
 }
 
 impl App {
+    /// Toggle keyboard focus between the text pane and the sidebar.
+    /// Hidden sidebars stay unfocused so arrows never drive an
+    /// invisible list.
+    pub(crate) fn cycle_focus(&mut self) {
+        use super::Focus;
+        self.focus = match self.focus {
+            Focus::Text => {
+                if self.view.side_w > 0 {
+                    self.side_sel = self.first_side_row();
+                    Focus::Sidebar
+                } else {
+                    Focus::Text
+                }
+            }
+            Focus::Sidebar => Focus::Text,
+        };
+    }
+
+    /// First actionable sidebar row for focus entry.
+    fn first_side_row(&self) -> usize {
+        rows(self)
+            .iter()
+            .position(|r| !matches!(r.kind, RowKind::Header))
+            .unwrap_or(0)
+    }
+
+    /// Move the sidebar highlight, skipping section headers with wrap.
+    pub(crate) fn side_move(&mut self, delta: i32) {
+        let rows = rows(self);
+        if rows.is_empty() {
+            return;
+        }
+        let n = rows.len() as i32;
+        let mut i = self.side_sel as i32;
+        for _ in 0..n {
+            i = (i + delta).rem_euclid(n);
+            if !matches!(rows[i as usize].kind, RowKind::Header) {
+                self.side_sel = i as usize;
+                return;
+            }
+        }
+    }
+
+    /// Jump the highlight to the first actionable row.
+    pub(crate) fn side_home(&mut self) {
+        self.side_sel = self.first_side_row();
+    }
+
+    /// Jump the highlight to the last actionable row.
+    pub(crate) fn side_end(&mut self) {
+        let rows = rows(self);
+        let mut last = self.first_side_row();
+        for (i, row) in rows.iter().enumerate() {
+            if !matches!(row.kind, RowKind::Header) {
+                last = i;
+            }
+        }
+        self.side_sel = last;
+    }
+
     /// Run one sidebar row; headers are inert.
     pub(crate) fn activate_row(&mut self, row: &SidebarRow) {
         match &row.kind {
@@ -115,5 +175,19 @@ impl App {
             RowKind::Act(action) => self.perform(action.clone()),
             RowKind::Tab(i) => self.switch_tab(*i),
         }
+    }
+
+    /// Activate the highlighted sidebar row, clamping a selection that
+    /// outlived tab changes.
+    pub(crate) fn sidebar_activate(&mut self) {
+        let rows = rows(self);
+        if rows.is_empty() {
+            return;
+        }
+        let i = self.side_sel.min(rows.len() - 1);
+        if matches!(rows[i].kind, RowKind::Header) {
+            return;
+        }
+        self.activate_row(&rows[i]);
     }
 }
