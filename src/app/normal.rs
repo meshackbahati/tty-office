@@ -98,9 +98,11 @@ impl App {
                 let name = self.theme.name;
                 self.message = format!("Theme: {name}");
             }
-            Action::FillDown => self.fill_cells(true),
-            Action::FillRight => self.fill_cells(false),
+            Action::FillDown => self.sheet_fill(true),
+            Action::FillRight => self.sheet_fill(false),
             Action::OpenLink => self.open_link(),
+            Action::SelectRow => self.sheet_select_axis(true),
+            Action::SelectCol => self.sheet_select_axis(false),
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
                 let name = self.doc.display_name();
@@ -181,20 +183,7 @@ impl App {
             Action::SelectAll => self.doc.select_all(),
             Action::ToggleBold => self.wrap_selection("**"),
             Action::ToggleItalic => self.wrap_selection("*"),
-            Action::ApplyHeading(level) => match &mut self.doc {
-                #[cfg(feature = "docx")]
-                crate::Document::Rich(rich) => match rich.apply_heading(level) {
-                    Ok(()) => {
-                        self.message = format!("Heading {level}");
-                    }
-                    Err(err) => {
-                        self.message = err;
-                    }
-                },
-                _ => {
-                    self.message = "Headings need a word document".to_string();
-                }
-            },
+            Action::ApplyHeading(level) => self.apply_heading(level),
             Action::Export => {
                 let suggestion = self.export_suggestion();
                 self.open_prompt(PromptKind::Export, "Export to: ", suggestion);
@@ -216,8 +205,8 @@ impl App {
             self.doc
                 .link_spans(line)
                 .into_iter()
-                .find(|s| at >= base + s.start && at < base + s.end)
-                .and_then(|s| s.target)
+                .find(|s| at >= base + s.0 && at < base + s.1)
+                .and_then(|s| s.2)
         })();
         match target {
             Some(target) => match open_url(&target) {
@@ -234,9 +223,40 @@ impl App {
         }
     }
 
+    /// Apply a heading level to the cursor paragraph in word documents.
+    /// Without the word backend the action reports instead of matching
+    /// a variant that does not exist.
+    #[cfg(feature = "docx")]
+    fn apply_heading(&mut self, level: u8) {
+        match &mut self.doc {
+            crate::Document::Rich(rich) => match rich.apply_heading(level) {
+                Ok(()) => {
+                    self.message = format!("Heading {level}");
+                }
+                Err(err) => {
+                    self.message = err;
+                }
+            },
+            _ => {
+                self.message = "Headings need a word document".to_string();
+            }
+        }
+    }
+
+    /// Apply a heading level to the cursor paragraph in word documents.
+    /// Without the word backend the action reports instead of matching
+    /// a variant that does not exist.
+    #[cfg(not(feature = "docx"))]
+    fn apply_heading(&mut self, _level: u8) {
+        self.message = "Headings need a word document".to_string();
+    }
+
     /// Fill from the leading cell or edge for `FillDown` (`down`) and
-    /// `FillRight`, reporting the outcome on the message line.
-    fn fill_cells(&mut self, down: bool) {
+    /// `FillRight`, reporting the outcome on the message line. Without
+    /// the spreadsheet backend the action reports instead of matching
+    /// a variant that does not exist.
+    #[cfg(feature = "xlsx")]
+    fn sheet_fill(&mut self, down: bool) {
         let filled = match &mut self.doc {
             crate::Document::Sheet(sheet) => {
                 if down {
@@ -260,6 +280,42 @@ impl App {
             let plural = if filled == 1 { "" } else { "s" };
             self.message = format!("Filled {filled} cell{plural}");
         }
+    }
+
+    /// Select the cursor row (`row`) or column in spreadsheets,
+    /// reporting the outcome on the message line.
+    #[cfg(feature = "xlsx")]
+    fn sheet_select_axis(&mut self, row: bool) {
+        match &mut self.doc {
+            crate::Document::Sheet(sheet) => {
+                if row {
+                    let r = sheet.cursor_cell().0;
+                    sheet.select_row(r);
+                    self.message = format!("Selected row {}", r + 1);
+                } else {
+                    sheet.select_col(sheet.cursor_cell().1);
+                    let letters = sheet.cursor_col_label();
+                    self.message = format!("Selected column {letters}");
+                }
+            }
+            _ => {
+                self.message = "Row and column selection need a spreadsheet".to_string();
+            }
+        }
+    }
+
+    /// Fill from the leading cell or edge for `FillDown` (`down`) and
+    /// `FillRight`, reporting the outcome on the message line.
+    #[cfg(not(feature = "xlsx"))]
+    fn sheet_fill(&mut self, _down: bool) {
+        self.message = "Fill needs a spreadsheet".to_string();
+    }
+
+    /// Select the cursor row (`row`) or column in spreadsheets,
+    /// reporting the outcome on the message line.
+    #[cfg(not(feature = "xlsx"))]
+    fn sheet_select_axis(&mut self, _row: bool) {
+        self.message = "Row and column selection need a spreadsheet".to_string();
     }
 }
 

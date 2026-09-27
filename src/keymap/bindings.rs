@@ -40,7 +40,9 @@ pub(crate) fn default_bindings() -> Vec<(Chord, Action)> {
         (Chord::new(K::Char('7'), m), Action::ApplyHeading(7)),
         (Chord::new(K::Char('8'), m), Action::ApplyHeading(8)),
         (Chord::new(K::Char('9'), m), Action::ApplyHeading(9)),
-        (Chord::new(K::Enter, m), Action::OpenLink), // Uppercase without a SHIFT flag: terminals that report Shift
+        (Chord::new(K::Enter, m), Action::OpenLink),
+        (Chord::new(K::Char('r'), a), Action::SelectRow),
+        (Chord::new(K::Char('c'), a), Action::SelectCol), // Uppercase without a SHIFT flag: terminals that report Shift
         // with Ctrl deliver the shifted fill chord, while legacy ones
         // deliver plain Ctrl+R, which keeps opening the read-file
         // prompt. Resolution scoring keeps the two deterministic.

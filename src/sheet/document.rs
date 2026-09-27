@@ -164,6 +164,23 @@ impl SheetDocument {
         Some(((r0, c0), (r1, c1)))
     }
 
+    /// Column letters of the cursor column, e.g. `B`, for messages.
+    pub fn cursor_col_label(&self) -> String {
+        super::cell::col_letters(self.cursor_col)
+    }
+
+    /// Select an entire row, keeping the cursor column as the active cell.
+    pub fn select_row(&mut self, row: usize) {
+        self.anchor = Some((row, 0));
+        self.cursor_row = row;
+    }
+
+    /// Select an entire column, keeping the cursor row as the active cell.
+    pub fn select_col(&mut self, col: usize) {
+        self.anchor = Some((0, col));
+        self.cursor_col = col;
+    }
+
     /// Place the caret on a cell for mouse clicks, clearing any selection.
     pub fn click_cell(&mut self, row: usize, col: usize) {
         self.cursor_row = row;

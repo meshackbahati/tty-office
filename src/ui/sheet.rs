@@ -131,10 +131,11 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     frame.render_widget(paragraph, area);
 
     // Place the terminal cursor on the cursor cell, or inside the echoed
-    // edit while a cell prompt is open, so typing shows its caret.
+    // edit while a cell prompt is open, so typing shows its caret. The
+    // pane hairline, header, and header rule hold the first three rows.
     if cursor_col >= coloff && cursor_row >= rowoff {
         let x = area.x + ROW_GUTTER as u16 + ((cursor_col - coloff) * CELL_STRIDE) as u16 + 1;
-        let y = area.y + 2 + ((cursor_row - rowoff) * 2) as u16;
+        let y = area.y + 3 + ((cursor_row - rowoff) * 2) as u16;
         if x < area.x + area.width && y < area.y + area.height {
             if matches!(app.mode, Mode::Prompt(PromptKind::CellEdit)) {
                 let prefix: String = app.prompt_buf.chars().take(app.prompt_cursor).collect();

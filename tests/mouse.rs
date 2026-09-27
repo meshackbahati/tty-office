@@ -136,11 +136,11 @@ fn sheet_click_and_drag_select_cells() {
     let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
     let mut app = App::new(doc);
     drawn(&mut app);
-    // Row 1 is the column-letter header with its rule on row 2, so row
-    // 3 is grid row 0; column 29 is grid column 0 past the sidebar, the
-    // gutter, and the first border line.
-    app.handle_mouse(down(29, 3));
-    app.handle_mouse(drag_to(42, 5));
+    // Row 1 is the pane hairline, row 2 the column-letter header with
+    // its rule on row 3, so row 4 is grid row 0; column 29 is grid
+    // column 0 past the sidebar, the gutter, and the first border line.
+    app.handle_mouse(down(29, 4));
+    app.handle_mouse(drag_to(42, 6));
     let rect = match &app.doc {
         Document::Sheet(sheet) => sheet.selection_rect(),
         _ => None,
@@ -155,11 +155,12 @@ fn sheet_grid_shows_the_cell_caret() {
     let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
     let mut app = App::new(doc);
     // Narrow frame hides the sidebar: gutter 6 plus one border column
-    // puts the first cell content at column 7, header row 1.
+    // puts the first cell content at column 7; the hairline, header,
+    // and header rule hold rows 1 to 3, so grid row 0 is row 4.
     let backend = TestBackend::new(50, 8);
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
-    term.backend_mut().assert_cursor_position((7, 3));
+    term.backend_mut().assert_cursor_position((7, 4));
 }
 
 #[test]
@@ -175,5 +176,45 @@ fn cell_edit_shows_the_caret_inside_the_echo() {
     let backend = TestBackend::new(50, 8);
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
-    term.backend_mut().assert_cursor_position((9, 3));
+    term.backend_mut().assert_cursor_position((9, 4));
+}
+
+#[test]
+#[cfg(feature = "xlsx")]
+fn gutter_click_selects_the_row() {
+    use tty_office::{SheetDocument, SheetFormat};
+    let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
+    let mut app = App::new(doc);
+    drawn(&mut app);
+    // Columns 22..28 are the row-number gutter on grid row 0 (frame
+    // row 4 past hairline, header, and rule).
+    app.handle_mouse(down(24, 4));
+    let rect = match &app.doc {
+        Document::Sheet(sheet) => sheet.selection_rect(),
+        _ => None,
+    };
+    assert!(
+        rect.is_some_and(|((r0, _), (r1, _))| r0 == 0 && r1 == 0),
+        "row not selected: {rect:?}"
+    );
+}
+
+#[test]
+#[cfg(feature = "xlsx")]
+fn header_click_selects_the_column() {
+    use tty_office::{SheetDocument, SheetFormat};
+    let doc = Document::Sheet(Box::new(SheetDocument::new(SheetFormat::Xlsx)));
+    let mut app = App::new(doc);
+    drawn(&mut app);
+    // Frame row 2 is the column-letter header; column 30 sits in grid
+    // column 0 past the sidebar, gutter, and border.
+    app.handle_mouse(down(30, 2));
+    let rect = match &app.doc {
+        Document::Sheet(sheet) => sheet.selection_rect(),
+        _ => None,
+    };
+    assert!(
+        rect.is_some_and(|((_, c0), (_, c1))| c0 == 0 && c1 == 0),
+        "column not selected: {rect:?}"
+    );
 }

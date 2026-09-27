@@ -22,7 +22,9 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 use crate::app::sidebar::{MIN_WIDTH_FOR_SIDEBAR, SIDEBAR_WIDTH};
-use crate::app::{App, Mode, PromptKind, ViewRects};
+#[cfg(feature = "xlsx")]
+use crate::app::PromptKind;
+use crate::app::{App, Mode, ViewRects};
 
 /// Style for selected ranges: reverse video for contrast without adding
 /// a palette color, so every theme keeps readable selections.
@@ -122,7 +124,14 @@ fn draw_message(frame: &mut Frame<'_>, app: &App, area: Rect) {
     // The caret follows the prompt text, except while a cell edit shows
     // it inside the grid instead.
     if let Mode::Prompt(kind) = &app.mode {
-        if !matches!(kind, PromptKind::CellEdit) {
+        #[cfg(feature = "xlsx")]
+        let grid_edit = matches!(kind, PromptKind::CellEdit);
+        #[cfg(not(feature = "xlsx"))]
+        let grid_edit = {
+            let _ = kind;
+            false
+        };
+        if !grid_edit {
             use unicode_width::UnicodeWidthStr;
             let prefix: String = app.prompt_buf.chars().take(app.prompt_cursor).collect();
             let at = 1 + app.prompt_label.width() + prefix.width();

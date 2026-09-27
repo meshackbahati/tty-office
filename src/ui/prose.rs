@@ -191,12 +191,7 @@ fn legacy_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, usi
             break;
         };
         decor.heading = app.doc.heading_at(cur);
-        decor.links = app
-            .doc
-            .link_spans(cur)
-            .iter()
-            .map(|s| (s.start, s.end))
-            .collect();
+        decor.links = app.doc.link_spans(cur).iter().map(|s| (s.0, s.1)).collect();
         lines.push(frame_line(
             render_line(
                 &raw,
@@ -289,12 +284,7 @@ fn wrapped_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, us
                 .take(piece.end - piece.start)
                 .collect();
             decor.heading = app.doc.heading_at(cur);
-            decor.links = app
-                .doc
-                .link_spans(cur)
-                .iter()
-                .map(|s| (s.start, s.end))
-                .collect();
+            decor.links = app.doc.link_spans(cur).iter().map(|s| (s.0, s.1)).collect();
             lines.push(frame_line(
                 render_line(
                     &chunk,

@@ -240,3 +240,37 @@ fn typed_text_echoes_inside_the_cursor_cell() {
     assert!(text.contains('┼'), "grid joints missing: {text}");
     assert!(text.contains("│hi"), "cell echo missing: {text}");
 }
+
+#[test]
+fn alt_r_selects_the_cursor_row() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("row.xlsx");
+    let mut app = App::new(open_sheet(&path));
+    app.handle_key(key(KeyCode::Down, KeyModifiers::NONE));
+    app.handle_key(key(KeyCode::Char('r'), KeyModifiers::ALT));
+    let Document::Sheet(sheet) = &app.doc else {
+        panic!("sheet expected");
+    };
+    assert_eq!(
+        sheet.selection_rect().map(|((r0, _), (r1, _))| (r0, r1)),
+        Some((1, 1))
+    );
+    assert_eq!(app.message, "Selected row 2");
+}
+
+#[test]
+fn alt_c_selects_the_cursor_column() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("col.xlsx");
+    let mut app = App::new(open_sheet(&path));
+    app.handle_key(key(KeyCode::Right, KeyModifiers::NONE));
+    app.handle_key(key(KeyCode::Char('c'), KeyModifiers::ALT));
+    let Document::Sheet(sheet) = &app.doc else {
+        panic!("sheet expected");
+    };
+    assert_eq!(
+        sheet.selection_rect().map(|((_, c0), (_, c1))| (c0, c1)),
+        Some((1, 1))
+    );
+    assert_eq!(app.message, "Selected column B");
+}

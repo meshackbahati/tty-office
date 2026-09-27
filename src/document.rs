@@ -97,28 +97,33 @@ impl Document {
 
     /// Heading level (1-9) of a prose line, for word documents with
     /// styled paragraphs; anything else reads as no heading.
-    pub fn heading_at(&self, line: usize) -> Option<u8> {
+    pub fn heading_at(&self, _line: usize) -> Option<u8> {
         match self {
             Document::Text(_) => None,
             #[cfg(feature = "docx")]
-            Document::Rich(r) => r.heading_at(line),
+            Document::Rich(r) => r.heading_at(_line),
             #[cfg(feature = "xlsx")]
             Document::Sheet(_) => None,
         }
     }
 
-    /// Hyperlink runs of a prose line, for word documents; anything else
-    /// carries no links.
-    pub fn link_spans(&self, line: usize) -> Vec<crate::rich::LinkSpan> {
+    /// Hyperlink runs of a prose line as `(start, end, target)`: word
+    /// documents resolve them, and anything else carries no links.
+    pub fn link_spans(&self, _line: usize) -> Vec<(usize, usize, Option<String>)> {
         match self {
             Document::Text(_) => Vec::new(),
             #[cfg(feature = "docx")]
-            Document::Rich(r) => r.link_spans(line),
+            Document::Rich(r) => r
+                .link_spans(_line)
+                .into_iter()
+                .map(|s| (s.start, s.end, s.target))
+                .collect(),
             #[cfg(feature = "xlsx")]
             Document::Sheet(_) => Vec::new(),
         }
     }
-    /// Mutable sheet document when this variant is a spreadsheet.    #[cfg(feature = "xlsx")]
+    /// Mutable sheet document when this variant is a spreadsheet.
+    #[cfg(feature = "xlsx")]
     pub fn sheet_mut(&mut self) -> Option<&mut SheetDocument> {
         match self {
             Document::Sheet(s) => Some(s),

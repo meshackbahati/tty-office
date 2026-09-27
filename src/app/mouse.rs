@@ -367,24 +367,24 @@ impl App {
         self.doc
             .link_spans(line)
             .into_iter()
-            .find(|s| rel >= s.start && rel < s.end)
-            .and_then(|s| s.target)
+            .find(|s| rel >= s.0 && rel < s.1)
+            .and_then(|s| s.2)
     }
 
     /// Grid cell for a press at absolute `(x, y)`, when the cell maps
-    /// into the data area below the column-letter header. Border and
-    /// rule rows select nothing rather than a neighbour cell.
+    /// into the data area below the column-letter header. Border, rule,
+    /// and header rows select nothing rather than a neighbour cell.
     #[cfg(feature = "xlsx")]
     fn sheet_cell_at(&mut self, x: u16, y: u16) -> Option<(usize, usize)> {
         let view = self.view;
         if y < view.text_y {
             return None;
         }
-        // Row 0 is the column-letter header and row 1 its rule; data
-        // rows pair with a rule below, so odd rows past the header are
-        // rules as well.
+        // Row 0 is the pane hairline, row 1 the column-letter header,
+        // row 2 its rule; data rows pair with a rule below, so odd rows
+        // past the rule are rules as well.
         let r = (y - view.text_y) as usize;
-        if r < 2 || (r % 2) == 1 {
+        if r < 3 || r.is_multiple_of(2) {
             return None;
         }
         let (rowoff, coloff) = match &self.doc {
@@ -398,12 +398,35 @@ impl App {
         if rel.is_multiple_of(CELL_STRIDE) {
             return None;
         }
-        Some((rowoff + (r - 2) / 2, coloff + rel / CELL_STRIDE))
+        Some((rowoff + (r - 3) / 2, coloff + rel / CELL_STRIDE))
     }
 
-    /// Press on a sheet: place the cell caret and remember the origin.
+    /// Press on a sheet: gutter and header clicks select whole rows
+    /// and columns, data clicks place the cell caret.
     #[cfg(feature = "xlsx")]
     fn sheet_press(&mut self, x: u16, y: u16) {
+        let view = self.view;
+        if y == view.text_y + 1 && x >= view.text_x + ROW_GUTTER as u16 {
+            // Column-letter header row past the gutter.
+            let rel = (x - view.text_x - ROW_GUTTER as u16) as usize;
+            if !rel.is_multiple_of(CELL_STRIDE) {
+                if let Document::Sheet(sheet) = &mut self.doc {
+                    let col = sheet.coloff() + rel / CELL_STRIDE;
+                    sheet.select_col(col);
+                }
+            }
+            return;
+        }
+        if x < view.text_x + ROW_GUTTER as u16 && y >= view.text_y + 3 {
+            // Row-number gutter on data rows, skipping rule rows.
+            let r = (y - view.text_y) as usize;
+            if r >= 3 && !r.is_multiple_of(2) {
+                if let Document::Sheet(sheet) = &mut self.doc {
+                    sheet.select_row(sheet.rowoff() + (r - 3) / 2);
+                }
+            }
+            return;
+        }
         if let Some((r, c)) = self.sheet_cell_at(x, y) {
             if let Document::Sheet(sheet) = &mut self.doc {
                 sheet.click_cell(r, c);

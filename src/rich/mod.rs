@@ -16,7 +16,6 @@ use crate::text::TextDocument;
 
 mod model;
 
-pub(crate) use model::LinkSpan;
 use model::{load_model, project_body_paragraphs, set_paragraph_text};
 
 /// On-disk package kind for a rich document.
