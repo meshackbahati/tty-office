@@ -122,6 +122,23 @@ impl Document {
             Document::Sheet(_) => Vec::new(),
         }
     }
+
+    /// Styled runs of a prose line as `(start, end, bold, italic,
+    /// underline)`: word documents resolve them, and anything else
+    /// carries no styles.
+    pub fn run_styles(&self, _line: usize) -> Vec<(usize, usize, bool, bool, bool)> {
+        match self {
+            Document::Text(_) => Vec::new(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r
+                .run_styles(_line)
+                .into_iter()
+                .map(|s| (s.start, s.end, s.flags.0, s.flags.1, s.flags.2))
+                .collect(),
+            #[cfg(feature = "xlsx")]
+            Document::Sheet(_) => Vec::new(),
+        }
+    }
     /// Mutable sheet document when this variant is a spreadsheet.
     #[cfg(feature = "xlsx")]
     pub fn sheet_mut(&mut self) -> Option<&mut SheetDocument> {

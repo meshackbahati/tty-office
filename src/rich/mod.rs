@@ -158,6 +158,12 @@ impl RichDocument {
         model::paragraph_links(&self.model, line)
     }
 
+    /// Styled runs of the paragraph behind surface `line`, with
+    /// paragraph-relative ranges matching surface character indices.
+    pub fn run_styles(&self, line: usize) -> Vec<model::RunStyle> {
+        model::paragraph_run_styles(&self.model, line)
+    }
+
     /// Apply Heading `level` to the cursor paragraph. Unsaved surface
     /// text syncs into the model first so fresh documents style
     /// correctly; the surface stays dirty so the style saves with

@@ -112,6 +112,8 @@ fn viewport_draws_page_rule_above_page_two() {
     // it from the status bar's compact `page 2/2` readout.
     assert!(text.contains(" page 2 "), "missing page rule: {text}");
     assert!(text.contains("line 51"), "caret line missing: {text}");
+    // Double-line joints set page breaks apart from hairline rules.
+    assert!(text.contains('╞'), "page joints missing: {text}");
 }
 
 #[test]

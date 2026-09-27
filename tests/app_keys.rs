@@ -365,3 +365,23 @@ fn ctrl_shift_arrows_select_by_word() {
         Some((Cursor::Char(0), Cursor::Char(5)))
     );
 }
+
+#[test]
+fn alt_page_keys_jump_between_page_starts() {
+    let cursor_line_of = |app: &mut App| {
+        app.doc.prose_surface().expect("surface").cursor_line()
+    };
+    let mut app = plain_app();
+    app.doc.insert_str(&"line\n".repeat(120));
+    // Insertion leaves the caret at the end, on page 3.
+    app.handle_key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::ALT));
+    assert_eq!(cursor_line_of(&mut app), 50);
+    assert_eq!(app.message, "Page 2/3");
+    app.handle_key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::ALT));
+    assert_eq!(cursor_line_of(&mut app), 0);
+    app.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::ALT));
+    assert_eq!(cursor_line_of(&mut app), 50);
+    app.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::ALT));
+    assert_eq!(cursor_line_of(&mut app), 100);
+    assert_eq!(app.message, "Page 3/3");
+}

@@ -114,6 +114,55 @@ pub(super) fn paragraph_links(model: &rdocx::Document, index: usize) -> Vec<Link
     spans
 }
 
+/// One styled run within a paragraph: character range plus flags.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunStyle {
+    /// Char offset of the first character in the paragraph text.
+    pub start: usize,
+    /// Char offset one past the last character.
+    pub end: usize,
+    /// Bold, italic, and underline flags in that order.
+    pub flags: (bool, bool, bool),
+}
+
+/// Styled runs of body paragraph `index` with paragraph-relative
+/// character ranges. Direct runs only; hyperlink contents keep link
+/// styling. Like links, mismatched totals come back empty.
+pub(super) fn paragraph_run_styles(model: &rdocx::Document, index: usize) -> Vec<RunStyle> {
+    let Some(paragraph) = model.paragraph(index) else {
+        return Vec::new();
+    };
+    let mut spans = Vec::new();
+    let mut offset = 0usize;
+    for item in paragraph.items() {
+        match item {
+            rdocx::ParagraphItemRef::Run(run) => {
+                let len = run.text().chars().count();
+                if run.is_bold() || run.is_italic() || run.underline_code_value().is_some() {
+                    spans.push(RunStyle {
+                        start: offset,
+                        end: offset + len,
+                        flags: (
+                            run.is_bold(),
+                            run.is_italic(),
+                            run.underline_code_value().is_some(),
+                        ),
+                    });
+                }
+                offset += len;
+            }
+            rdocx::ParagraphItemRef::Hyperlink(link) => {
+                offset += link.text().chars().count();
+            }
+            _ => {}
+        }
+    }
+    if offset != paragraph.text().chars().count() {
+        return Vec::new();
+    }
+    spans
+}
+
 /// Rewrite body paragraph `index` so its plain text equals `text`.
 ///
 /// Empty or text-only paragraphs are updated in place through the public run

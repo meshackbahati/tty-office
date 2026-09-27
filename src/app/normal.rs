@@ -141,6 +141,8 @@ impl App {
             Action::FillDown => self.sheet_fill(true),
             Action::FillRight => self.sheet_fill(false),
             Action::OpenLink => self.open_link(),
+            Action::PrevPage => self.goto_page(-1),
+            Action::NextPage => self.goto_page(1),
             Action::SelectRow => self.sheet_select_axis(true),
             Action::SelectCol => self.sheet_select_axis(false),
             Action::NewText => {
@@ -233,6 +235,50 @@ impl App {
             }
             Action::Noop => {}
         }
+    }
+
+    /// Jump to the previous (`delta` negative) or next page start,
+    /// reporting the landing page on the message line.
+    fn goto_page(&mut self, delta: i32) {
+        let layout = self.page_layout();
+        let Some((cur, count)) = (|| {
+            let surface = self.doc.prose_surface()?;
+            Some((surface.cursor_line(), surface.line_count()))
+        })() else {
+            self.message = "Pages need a word or text document".to_string();
+            return;
+        };
+        // Start of the current page: the nearest boundary at or above.
+        let mut page_start = cur;
+        while page_start > 0 && !layout.is_page_start(page_start) {
+            page_start -= 1;
+        }
+        let target = if delta < 0 {
+            if page_start == 0 {
+                0
+            } else {
+                let mut prev = page_start - 1;
+                while prev > 0 && !layout.is_page_start(prev) {
+                    prev -= 1;
+                }
+                prev
+            }
+        } else {
+            let mut next = cur + 1;
+            let last = count.saturating_sub(1);
+            while next < last && !layout.is_page_start(next) {
+                next += 1;
+            }
+            next.min(last)
+        };
+        if let Some(surface) = self.doc.prose_surface() {
+            let at = surface.line_char_start(target);
+            surface.set_cursor(at, false);
+        }
+        self.scroll_to_cursor();
+        let page = layout.page_of(target);
+        let pages = layout.page_count(count);
+        self.message = format!("Page {page}/{pages}");
     }
 
     /// Open the hyperlink under the cursor with the system handler.

@@ -68,6 +68,10 @@ pub enum Action {
     ApplyHeading(u8),
     /// Open the hyperlink under the cursor with the system handler.
     OpenLink,
+    /// Jump to the previous page start in prose documents.
+    PrevPage,
+    /// Jump to the next page start in prose documents.
+    NextPage,
     /// Cycle keyboard focus across menu bar, sidebar, and text.
     FocusNext,
     /// Select the entire cursor row in spreadsheets.
@@ -134,6 +138,8 @@ pub fn describe(action: &Action) -> String {
         Action::ToggleItalic => "Italic (*)".into(),
         Action::ApplyHeading(level) => format!("Heading {level}"),
         Action::OpenLink => "Open link".into(),
+        Action::PrevPage => "Previous page".into(),
+        Action::NextPage => "Next page".into(),
         Action::FocusNext => "Focus next section".into(),
         Action::SelectRow => "Select row".into(),
         Action::SelectCol => "Select column".into(),
@@ -227,6 +233,8 @@ pub fn action_name(action: &Action) -> Option<&'static str> {
         ApplyHeading(9) => "heading_9",
         ApplyHeading(_) => return None,
         OpenLink => "open_link",
+        PrevPage => "prev_page",
+        NextPage => "next_page",
         FocusNext => "focus_next",
         SelectRow => "select_row",
         SelectCol => "select_col",
@@ -288,6 +296,8 @@ pub(crate) fn action_from_name(name: &str) -> Option<Action> {
         "heading_8" => ApplyHeading(8),
         "heading_9" => ApplyHeading(9),
         "open_link" => OpenLink,
+        "prev_page" => PrevPage,
+        "next_page" => NextPage,
         "focus_next" => FocusNext,
         "select_row" => SelectRow,
         "select_col" => SelectCol,

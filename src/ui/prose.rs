@@ -51,6 +51,7 @@ struct LineDecor<'a> {
     theme: Theme,
     heading: Option<u8>,
     links: Vec<(usize, usize)>,
+    runs: Vec<(usize, usize, bool, bool, bool)>,
 }
 
 /// Draw the text pane, dispatching wrapped and legacy renderers.
@@ -151,6 +152,7 @@ fn legacy_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, usi
         theme,
         heading: None,
         links: Vec::new(),
+        runs: Vec::new(),
     };
     // Break rules above page starts consume viewport rows of their own, so
     // pull the window down until the caret and its rules fit. The stored
@@ -192,6 +194,7 @@ fn legacy_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, usi
         };
         decor.heading = app.doc.heading_at(cur);
         decor.links = app.doc.link_spans(cur).iter().map(|s| (s.0, s.1)).collect();
+        decor.runs = app.doc.run_styles(cur);
         lines.push(frame_line(
             render_line(
                 &raw,
@@ -235,6 +238,7 @@ fn wrapped_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, us
         theme,
         heading: None,
         links: Vec::new(),
+        runs: Vec::new(),
     };
     // The caret piece is shared by the pull-down and the row math.
     let cursor_seg = match app.doc.prose_surface() {
@@ -285,6 +289,7 @@ fn wrapped_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, us
                 .collect();
             decor.heading = app.doc.heading_at(cur);
             decor.links = app.doc.link_spans(cur).iter().map(|s| (s.0, s.1)).collect();
+            decor.runs = app.doc.run_styles(cur);
             lines.push(frame_line(
                 render_line(
                     &chunk,
@@ -328,7 +333,8 @@ fn page_rule(layout: &PageLayout, line: usize, width: usize, theme: Theme) -> Li
     let fill = inner.saturating_sub(label.chars().count());
     let left = fill / 2;
     let right = fill - left;
-    let text = format!("├{}{}{}┤", "─".repeat(left), label, "─".repeat(right));
+    // Double lines set page breaks apart from every hairline rule.
+    let text = format!("╞{}{}{}╡", "═".repeat(left), label, "═".repeat(right));
     let mut line = Line::styled(text, Style::default().fg(theme.dim));
     wash_line(&mut line, theme);
     line
@@ -404,15 +410,33 @@ fn render_line<'a>(
             Style::default()
                 .fg(decor.theme.accent)
                 .add_modifier(Modifier::UNDERLINED)
-        } else if let Some(level) = decor.heading {
-            // Headings read bold; the top two levels take the accent.
-            let mut style = Style::default().add_modifier(Modifier::BOLD);
-            if level <= 2 {
-                style = style.fg(decor.theme.accent);
+        } else {
+            // Headings read bold with the accent on the top two levels;
+            // styled runs merge their flags over that base.
+            let mut style = match decor.heading {
+                Some(level) => {
+                    let mut style = Style::default().add_modifier(Modifier::BOLD);
+                    if level <= 2 {
+                        style = style.fg(decor.theme.accent);
+                    }
+                    style
+                }
+                None => Style::default(),
+            };
+            if let Some((_, _, bold, italic, underline)) =
+                decor.runs.iter().find(|(a, b, ..)| idx >= *a && idx < *b)
+            {
+                if *bold {
+                    style = style.add_modifier(Modifier::BOLD);
+                }
+                if *italic {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                if *underline {
+                    style = style.add_modifier(Modifier::UNDERLINED);
+                }
             }
             style
-        } else {
-            Style::default()
         }
     };
 

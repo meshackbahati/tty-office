@@ -29,6 +29,7 @@ keep working unless rebound by name.
 | `undo`, `redo`, `select_all`, `toggle_bold`, `toggle_italic`, `export` |
 | `heading_1` to `heading_9` |
 | `open_link` |
+| `prev_page`, `next_page` |
 | `select_row`, `select_col` |
 | `move_word_left`, `move_word_right` |
 | `extend_word_left`, `extend_word_right` |
@@ -93,6 +94,7 @@ Ctrl+S saves. Muscle memory from VS Code transfers directly.
 | Ctrl+1 to Ctrl+9 | Apply Heading 1 to 9 to the cursor paragraph in word documents. |
 | Ctrl+Left, Ctrl+Right | Move by word. |
 | Ctrl+Shift+Left, Ctrl+Shift+Right | Select by word. |
+| Alt+PageUp, Alt+PageDown | Jump to the previous or next page start. |
 | Ctrl+Enter | Open the hyperlink under the cursor with the system handler. |
 
 ## Motion and selection
