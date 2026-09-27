@@ -4,6 +4,7 @@
 //! into document edits or mode changes. It never talks to the terminal
 //! directly, which keeps the event loop and the tests separable.
 
+pub(crate) mod browse;
 pub(crate) mod menu;
 mod mouse;
 mod normal;
@@ -37,6 +38,8 @@ pub enum Mode {
     Prompt(PromptKind),
     /// Full-screen help overlay.
     Help,
+    /// File browser overlay.
+    Browse,
 }
 
 /// Which completion path a line prompt should take on Enter.
@@ -45,8 +48,6 @@ pub enum Mode {
 pub enum PromptKind {
     /// Path prompt for writing the current document.
     SaveAs,
-    /// Path prompt opening a document, which replaces the buffer.
-    OpenFile,
     /// Path prompt inserting a text file at the cursor.
     ReadFile,
     /// Search needle.
@@ -102,6 +103,8 @@ pub struct App {
     pub(crate) view: ViewRects,
     /// Drag origin for mouse selection, cleared on release.
     drag: Option<mouse::DragOrigin>,
+    /// File browser session while the overlay owns the keyboard.
+    pub(crate) browse: Option<browse::BrowseState>,
     /// Display zoom: extra blank rows per text line, up to MAX_ZOOM.
     zoom: u8,
     /// Accent palette for chrome; cycled by chord, set by config.
@@ -158,6 +161,7 @@ impl App {
             sidebar: true,
             view: ViewRects::default(),
             drag: None,
+            browse: None,
             zoom: 0,
             keymap: Keymap::load_user(),
             message: String::new(),
@@ -235,6 +239,7 @@ impl App {
             Mode::ConfirmQuit => self.handle_confirm_quit(key),
             Mode::Prompt(kind) => self.handle_prompt(kind, key),
             Mode::Help => self.handle_help(key),
+            Mode::Browse => self.handle_browse(key),
         }
     }
 

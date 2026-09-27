@@ -75,8 +75,8 @@ impl App {
                 }
             }
             Action::Open => {
-                self.open_prompt(PromptKind::OpenFile, "Open: ", String::new());
-                self.message = "Enter a file to open in a new tab".to_string();
+                self.enter_browse();
+                self.message = "Enter opens · type filters · Esc closes".to_string();
             }
             Action::NextTab => self.next_tab(),
             Action::PrevTab => self.prev_tab(),

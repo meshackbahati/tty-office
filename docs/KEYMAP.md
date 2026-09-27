@@ -57,7 +57,7 @@ Ctrl+S saves. Muscle memory from VS Code transfers directly.
 | Chord | Action |
 |-------|--------|
 | Ctrl+X | Exit. Prompts when any tab has unsaved changes. |
-| Ctrl+O | Open a file in a new tab. |
+| Ctrl+O | Open the file browser; pick a file to open in a new tab. |
 | Ctrl+N | New tab with an untitled word document. |
 | Ctrl+S | Save; folds into Save As for a pathless document. |
 | Ctrl+Shift+S | Save As. Prefilled with the current path, so renaming is one edit away; type any path manually. |
@@ -169,6 +169,23 @@ The sidebar lists file creation entries for every format, common
 commands, and the open tabs. Ctrl+B toggles it, and terminals
 narrower than 60 columns hide it to protect the text pane. Every
 entry mirrors a menu or key action; clicking a tab jumps to it.
+
+## File browser
+
+Ctrl+O opens a directory picker over the text pane, entirely in
+the terminal: no file manager ever appears. Directories list first,
+each alphabetically; typing filters by substring, and the overlay
+scrolls past a screenful either way.
+
+| Chord | Action |
+|-------|--------|
+| Up, Down, Home, End | Move the selection. |
+| Type letters | Filter the listing; Backspace deletes a filter character. |
+| Enter | Open the file in a new tab, or descend into the directory. |
+| Backspace with empty filter | Ascend to the parent directory. |
+| Esc | Close the browser. |
+| Click a row | Select it; clicking the selection opens or descends. |
+| Wheel | Scroll the selection through long listings. |
 
 ## Mouse
 

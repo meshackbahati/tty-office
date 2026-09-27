@@ -122,7 +122,7 @@ fn menu_swallows_keys_and_esc_restores_typing() {
 fn menu_save_as_prefills_the_current_path() {
     let mut app = plain_app();
     app.handle_key(ctrl('o'));
-    for c in "tab-probe.txt".chars() {
+    for c in "READM".chars() {
         app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
@@ -134,5 +134,9 @@ fn menu_save_as_prefills_the_current_path() {
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.mode, Mode::Prompt(PromptKind::SaveAs));
-    assert_eq!(app.prompt_buf, "tab-probe.txt");
+    assert!(
+        app.prompt_buf.ends_with("README.md"),
+        "prefill missing: {}",
+        app.prompt_buf
+    );
 }

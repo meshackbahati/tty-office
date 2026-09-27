@@ -46,7 +46,8 @@ impl App {
         }
     }
 
-    /// Left press: menu bar, dropdown, sidebar, tab strip, then document.
+    /// Left press: menu bar, dropdown, browser overlay, sidebar, tab
+    /// strip, then document.
     fn mouse_down(&mut self, x: u16, y: u16) {
         if y == 0 {
             if self.mode == Mode::Normal {
@@ -76,6 +77,14 @@ impl App {
             self.open_menu = None;
         }
         let view = self.view;
+        // The browser owns body clicks while open; the tab strip keeps
+        // working above it and the menu row stays inert.
+        if self.mode == Mode::Browse {
+            if y > view.text_y {
+                self.browse_click(x, y);
+            }
+            return;
+        }
         // The tab strip spans the full width above the body, so it wins
         // over the sidebar columns it visually overlaps.
         if let Some(tab_y) = view.tab_y {
@@ -124,8 +133,15 @@ impl App {
         }
     }
 
-    /// Wheel notch: scroll the view without moving the caret.
+    /// Wheel notch: scroll the view without moving the caret, or move
+    /// the browser selection while the overlay is open.
     fn mouse_wheel(&mut self, delta: i32) {
+        if self.mode == Mode::Browse {
+            if let Some(b) = self.browse.as_mut() {
+                b.move_sel(delta);
+            }
+            return;
+        }
         if let Some(surface) = self.doc.prose_surface() {
             surface.scroll_lines(delta);
         }
@@ -134,6 +150,35 @@ impl App {
             if let Document::Sheet(sheet) = &mut self.doc {
                 sheet.scroll_rows(delta);
             }
+        }
+    }
+
+    /// Click inside the browser overlay: select the row, activating when
+    /// the row is already selected. The overlay covers the body rows, so
+    /// the text pane origin doubles as the body origin.
+    fn browse_click(&mut self, x: u16, y: u16) {
+        let _ = x;
+        let view = self.view;
+        let content_h = (view.text_h as usize).saturating_sub(2);
+        let (selected, len) = match &self.browse {
+            Some(b) => (b.selected, b.visible().len()),
+            None => return,
+        };
+        let rel = (y - view.text_y - 1) as usize;
+        let idx = super::browse::BrowseState::offset(selected, len, content_h) + rel;
+        if idx >= len {
+            return;
+        }
+        let already = self
+            .browse
+            .as_ref()
+            .map(|b| b.selected == idx)
+            .unwrap_or(false);
+        if let Some(b) = self.browse.as_mut() {
+            b.selected = idx;
+        }
+        if already {
+            self.browse_activate();
         }
     }
 

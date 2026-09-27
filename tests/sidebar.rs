@@ -95,7 +95,7 @@ fn file_menu_creates_a_spreadsheet() {
 fn sidebar_lists_open_tabs() {
     let mut app = plain_app();
     app.handle_key(ctrl('o'));
-    for c in "tab-probe.txt".chars() {
+    for c in "READM".chars() {
         app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
@@ -106,7 +106,7 @@ fn sidebar_lists_open_tabs() {
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     let text = buffer_text(&mut term);
     assert!(text.contains("Tabs"), "section missing: {text}");
-    assert!(text.contains("tab-probe"), "tab missing: {text}");
+    assert!(text.contains("README.md"), "tab missing: {text}");
     assert!(text.contains("[no name]"), "first tab missing: {text}");
 }
 

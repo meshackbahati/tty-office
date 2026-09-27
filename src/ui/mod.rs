@@ -6,6 +6,7 @@
 //! pane marks page boundaries with a hairline rule carrying the page number,
 //! using the same [`crate::page::PageLayout`] the PDF exporter chunks on.
 
+mod browse;
 mod menu;
 #[cfg(feature = "xlsx")]
 mod sheet;
@@ -111,6 +112,9 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     status::draw_status(frame, app, status);
     draw_message(frame, app, message);
     menu::draw_dropdown(frame, app);
+    if app.mode == Mode::Browse {
+        browse::draw_browse(frame, app, body);
+    }
 
     if app.mode == Mode::Help {
         draw_help(frame, app, text);

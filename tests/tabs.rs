@@ -3,7 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
-use tty_office::{draw, App, Document, Editor, Mode, PromptKind, TextDocument};
+use tty_office::{draw, App, Document, Editor, Mode, TextDocument};
 
 fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
     KeyEvent::new(code, mods)
@@ -111,21 +111,17 @@ fn closing_the_last_clean_tab_quits() {
 }
 
 #[test]
-fn open_prompt_accept_opens_a_new_tab() {
+fn browser_accept_opens_a_new_tab() {
     let mut app = plain_app();
     app.handle_key(ctrl('o'));
-    assert_eq!(app.mode, Mode::Prompt(PromptKind::OpenFile));
-    for c in "tab-probe.txt".chars() {
+    assert_eq!(app.mode, Mode::Browse);
+    for c in "READM".chars() {
         app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.tab_count(), 2);
     assert_eq!(app.active_tab(), 1);
-    assert!(
-        app.message.starts_with("Opened "),
-        "message: {}",
-        app.message
-    );
+    assert_eq!(app.message, "Opened README.md");
 }
 
 #[test]
@@ -143,7 +139,7 @@ fn exit_prompts_when_a_background_tab_is_dirty() {
 fn tab_bar_renders_all_titles_once_a_second_tab_exists() {
     let mut app = plain_app();
     app.handle_key(ctrl('o'));
-    for c in "tab-probe.txt".chars() {
+    for c in "READM".chars() {
         app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
@@ -151,6 +147,6 @@ fn tab_bar_renders_all_titles_once_a_second_tab_exists() {
     let mut term = Terminal::new(backend).expect("test terminal");
     term.draw(|frame| draw(frame, &mut app)).expect("draw");
     let text = buffer_text(&mut term);
-    assert!(text.contains("tab-probe"), "tab missing: {text}");
+    assert!(text.contains("README.md"), "tab missing: {text}");
     assert!(text.contains("[no name]"), "first tab missing: {text}");
 }
