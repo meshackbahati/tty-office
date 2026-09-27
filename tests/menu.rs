@@ -140,3 +140,23 @@ fn menu_save_as_prefills_the_current_path() {
         app.prompt_buf
     );
 }
+
+#[test]
+#[cfg(feature = "docx")]
+fn format_menu_applies_heading() {
+    use tempfile::TempDir;
+
+    let dir = TempDir::new().expect("temp dir");
+    let mut doc = tty_office::open(&dir.path().join("style.docx")).expect("open rich");
+    doc.insert_str("Title");
+    let mut app = App::new(doc);
+    app.handle_key(alt('o'));
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.message, "Heading 1");
+    // Cursor never left the first line, so it carries the style.
+    app.handle_key(key(KeyCode::Home, KeyModifiers::CONTROL));
+    let tty_office::Document::Rich(rich) = &app.doc else {
+        panic!("rich expected");
+    };
+    assert_eq!(rich.heading_at(0), Some(1));
+}

@@ -168,13 +168,19 @@ typing can never leak into the document.
 
 | Chord | Action |
 |-------|--------|
-| Alt+F, Alt+E, Alt+V, Alt+H | Open the File, Edit, View, and Help menus. |
+| Alt+F, Alt+E, Alt+O, Alt+V, Alt+H | Open the File, Edit, Format, View, and Help menus. |
 | F10 | Open the File menu. |
 | Up, Down | Move the highlight. |
 | Left, Right | Switch to the neighbouring menu. |
 | Enter | Run the highlighted item. |
 | Esc or any other key | Dismiss the menu. |
 | Letter | Switch to the menu whose name starts with it. |
+
+Ctrl+digit chords need a terminal that reports modified digits
+(kitty keyboard protocol does); legacy terminals deliver a plain
+digit, which types instead of styling. The Format menu applies
+Heading 1 to 6 on every terminal, and levels 7 to 9 stay on their
+chords and config names.
 
 ## Sidebar
 

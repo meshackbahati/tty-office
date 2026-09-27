@@ -11,7 +11,7 @@ use crate::keymap::Action;
 use super::App;
 
 /// Top-level menus in bar order.
-pub(crate) const LABELS: [&str; 4] = ["File", "Edit", "View", "Help"];
+pub(crate) const LABELS: [&str; 5] = ["File", "Edit", "Format", "View", "Help"];
 
 /// One dropdown row: label, action, and the shortcut shown beside it.
 pub(crate) struct MenuItem {
@@ -105,7 +105,6 @@ static EDIT_ITEMS: [MenuItem; 7] = [
         shortcut: "Ctrl+\\",
     },
 ];
-
 static VIEW_ITEMS: [MenuItem; 6] = [
     MenuItem {
         label: "Show position",
@@ -139,6 +138,41 @@ static VIEW_ITEMS: [MenuItem; 6] = [
     },
 ];
 
+/// Word paragraph styles. Levels 7-9 stay on their chords and config
+/// names; the menu carries the six everyday levels.
+static FORMAT_ITEMS: [MenuItem; 6] = [
+    MenuItem {
+        label: "Heading 1",
+        action: Action::ApplyHeading(1),
+        shortcut: "Ctrl+1",
+    },
+    MenuItem {
+        label: "Heading 2",
+        action: Action::ApplyHeading(2),
+        shortcut: "Ctrl+2",
+    },
+    MenuItem {
+        label: "Heading 3",
+        action: Action::ApplyHeading(3),
+        shortcut: "Ctrl+3",
+    },
+    MenuItem {
+        label: "Heading 4",
+        action: Action::ApplyHeading(4),
+        shortcut: "Ctrl+4",
+    },
+    MenuItem {
+        label: "Heading 5",
+        action: Action::ApplyHeading(5),
+        shortcut: "Ctrl+5",
+    },
+    MenuItem {
+        label: "Heading 6",
+        action: Action::ApplyHeading(6),
+        shortcut: "Ctrl+6",
+    },
+];
+
 static HELP_ITEMS: [MenuItem; 1] = [MenuItem {
     label: "Keyboard shortcuts",
     action: Action::Help,
@@ -150,7 +184,8 @@ pub(crate) fn items(menu: usize) -> &'static [MenuItem] {
     match menu {
         0 => &FILE_ITEMS,
         1 => &EDIT_ITEMS,
-        2 => &VIEW_ITEMS,
+        2 => &FORMAT_ITEMS,
+        3 => &VIEW_ITEMS,
         _ => &HELP_ITEMS,
     }
 }
@@ -197,6 +232,8 @@ pub(crate) fn hit_item(menu: usize, y: u16) -> Option<usize> {
 
 impl App {
     /// Menu hotkey: Alt+mnemonic opens a menu, F10 opens File.
+    /// Control digits never reach most terminal emulators as modified
+    /// keys, so headings stay reachable through the Format menu below.
     pub(crate) fn menu_hotkey(key: &KeyEvent) -> Option<usize> {
         if key.code == KeyCode::F(10) {
             return Some(0);
@@ -206,8 +243,9 @@ impl App {
                 return match c.to_ascii_lowercase() {
                     'f' => Some(0),
                     'e' => Some(1),
-                    'v' => Some(2),
-                    'h' => Some(3),
+                    'o' => Some(2),
+                    'v' => Some(3),
+                    'h' => Some(4),
                     _ => None,
                 };
             }
