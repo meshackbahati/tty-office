@@ -274,3 +274,24 @@ fn alt_c_selects_the_cursor_column() {
     );
     assert_eq!(app.message, "Selected column B");
 }
+
+#[test]
+fn save_as_txt_refuses_for_workbooks() {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("roundtrip.xlsx");
+    let mut doc = open_sheet(&path);
+    doc.insert_str("data");
+    let err = doc
+        .save_as(&dir.path().join("data.txt"))
+        .expect_err("txt save must refuse");
+    match err {
+        tty_office::DocumentError::Save { message, .. } => {
+            assert!(
+                message.contains(".xlsx"),
+                "message names the writable extensions: {message}"
+            );
+        }
+        other => panic!("wrong error: {other:?}"),
+    }
+    assert!(!dir.path().join("data.txt").exists());
+}

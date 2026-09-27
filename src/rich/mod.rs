@@ -288,10 +288,11 @@ impl RichDocument {
 
     /// Write surface lines back into body paragraphs, then serialize.
     fn save_to(&mut self, target: &Path) -> Result<(), DocumentError> {
-        let detected = RichFormat::from_path(target);
-        if let Some(fmt) = detected {
-            self.format = fmt;
-        }
+        let detected = RichFormat::from_path(target).ok_or_else(|| DocumentError::Save {
+            path: target.to_path_buf(),
+            message: "destination extension must be .docx or .odt".to_string(),
+        })?;
+        self.format = detected;
         if self.surface.is_dirty() {
             self.sync_surface_into_model()?;
         }

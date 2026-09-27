@@ -7,8 +7,17 @@
 
 use std::path::Path;
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tempfile::TempDir;
-use tty_office::{open, Document, Editor, Motion, RichFormat};
+use tty_office::{open, App, Document, Editor, Motion, RichFormat};
+
+fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
+    KeyEvent::new(code, mods)
+}
+
+fn ctrl(c: char) -> KeyEvent {
+    key(KeyCode::Char(c), KeyModifiers::CONTROL)
+}
 
 fn roundtrip(ext: &str) {
     let dir = TempDir::new().expect("temp dir");
@@ -87,4 +96,50 @@ fn undo_after_save_restores_pre_save_text() {
     assert!(doc.undo());
     assert_eq!(doc.text_projection(), "");
     assert!(doc.is_dirty());
+}
+
+#[test]
+fn save_as_txt_refuses_for_word_documents() {
+    use tty_office::DocumentError;
+
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("roundtrip.docx");
+    let mut doc = open(&path).expect("open new rich path");
+    doc.insert_str("words");
+    let err = doc
+        .save_as(&dir.path().join("words.txt"))
+        .expect_err("txt save must refuse");
+    match err {
+        DocumentError::Save { message, .. } => {
+            assert!(
+                message.contains(".docx") && message.contains(".odt"),
+                "message names the writable extensions: {message}"
+            );
+        }
+        other => panic!("wrong error: {other:?}"),
+    }
+    // Nothing was written under the refused name.
+    assert!(!dir.path().join("words.txt").exists());
+}
+
+#[test]
+fn save_as_bare_name_gains_the_document_extension() {
+    use tty_office::{RichDocument, RichFormat};
+
+    let dir = TempDir::new().expect("temp dir");
+    let bare = dir.path().join("budget").to_string_lossy().into_owned();
+    let mut doc = Document::Rich(Box::new(RichDocument::new(RichFormat::Docx)));
+    doc.insert_str("words");
+    let mut app = App::new(doc);
+    // Pathless documents fold Ctrl+S into Save As; replace the
+    // suggested name with an extensionless absolute path.
+    app.handle_key(ctrl('s'));
+    app.prompt_buf.clear();
+    for c in bare.chars() {
+        app.handle_key(key(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.message.starts_with("Wrote "), "message: {}", app.message);
+    assert!(dir.path().join("budget.docx").is_file());
+    assert!(!dir.path().join("budget").exists());
 }
