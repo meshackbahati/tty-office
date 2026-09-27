@@ -208,23 +208,18 @@ impl TextDocument {
         segments.len().saturating_sub(1)
     }
 
-    /// Place the caret at display column `col` within piece `seg` of
-    /// `line` for wrapped mouse clicks, clamping into the buffer.
-    /// `extend` keeps the selection anchor for drag selections.
-    pub fn click_wrapped(
-        &mut self,
+    /// Absolute character index for display column `col` within piece
+    /// `seg` of `line`, or `None` when the line has no pieces.
+    pub fn wrapped_char_at(
+        &self,
         line: usize,
         width: usize,
         seg: usize,
         col: usize,
-        extend: bool,
-    ) {
+    ) -> Option<usize> {
         let line = line.min(self.line_count().saturating_sub(1));
         let segments = self.wrap_segments(line, width);
-        let seg = segments.get(seg).or(segments.last());
-        let Some(seg) = seg else {
-            return;
-        };
+        let seg = segments.get(seg).or(segments.last())?;
         let text = self.line_text(line);
         let piece: Vec<char> = text
             .chars()
@@ -241,7 +236,23 @@ impl TextDocument {
             w += cw;
             taken += 1;
         }
-        self.set_cursor(self.line_char_start(line) + seg.start + taken, extend);
+        Some(self.line_char_start(line) + seg.start + taken)
+    }
+
+    /// Place the caret at display column `col` within piece `seg` of
+    /// `line` for wrapped mouse clicks, clamping into the buffer.
+    /// `extend` keeps the selection anchor for drag selections.
+    pub fn click_wrapped(
+        &mut self,
+        line: usize,
+        width: usize,
+        seg: usize,
+        col: usize,
+        extend: bool,
+    ) {
+        if let Some(at) = self.wrapped_char_at(line, width, seg, col) {
+            self.set_cursor(at, extend);
+        }
     }
 
     /// Character index of the cursor head.

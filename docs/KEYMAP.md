@@ -27,6 +27,7 @@ keep working unless rebound by name.
 | `cut_line`, `uncut`, `show_position`, `help` |
 | `undo`, `redo`, `select_all`, `toggle_bold`, `toggle_italic`, `export` |
 | `heading_1` to `heading_9` |
+| `open_link` |
 | `move_word_left`, `move_word_right` |
 | `extend_word_left`, `extend_word_right` |
 | `insert_newline`, `backspace`, `delete_forward` |
@@ -89,6 +90,7 @@ Ctrl+S saves. Muscle memory from VS Code transfers directly.
 | Ctrl+1 to Ctrl+9 | Apply Heading 1 to 9 to the cursor paragraph in word documents. |
 | Ctrl+Left, Ctrl+Right | Move by word. |
 | Ctrl+Shift+Left, Ctrl+Shift+Right | Select by word. |
+| Ctrl+Enter | Open the hyperlink under the cursor with the system handler. |
 
 ## Motion and selection
 
@@ -197,10 +199,11 @@ scrolls past a screenful either way.
 
 Clicking places the caret in text and on cells in grids, dragging
 extends the selection, and the wheel scrolls without moving the
-caret. The menu bar, dropdown items, sidebar rows, and tab cells
-are all clickable; a click outside an open dropdown dismisses it
-and still lands. Mouse reporting turns on with the session and is
-released on exit and on crashes.
+caret. Ctrl+click opens the hyperlink under the pointer in word
+documents without moving the caret. The menu bar, dropdown items,
+sidebar rows, and tab cells are all clickable; a click outside an
+open dropdown dismisses it and still lands. Mouse reporting turns
+on with the session and is released on exit and on crashes.
 
 ## Zoom
 

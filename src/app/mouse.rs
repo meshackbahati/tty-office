@@ -5,7 +5,7 @@
 //! only in Normal mode, while the wheel scrolls anywhere, and a click
 //! outside an open dropdown dismisses the menu before landing.
 
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::UnicodeWidthStr;
 
 #[cfg(feature = "xlsx")]
@@ -32,7 +32,7 @@ impl App {
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                self.mouse_down(mouse.column, mouse.row);
+                self.mouse_down(mouse.column, mouse.row, mouse.modifiers);
             }
             MouseEventKind::Drag(MouseButton::Left) => {
                 self.mouse_drag(mouse.column, mouse.row);
@@ -47,8 +47,9 @@ impl App {
     }
 
     /// Left press: menu bar, dropdown, browser overlay, sidebar, tab
-    /// strip, then document.
-    fn mouse_down(&mut self, x: u16, y: u16) {
+    /// strip, then document. A control press over a hyperlink opens it
+    /// without moving the caret.
+    fn mouse_down(&mut self, x: u16, y: u16, mods: KeyModifiers) {
         if y == 0 {
             if self.mode == Mode::Normal {
                 if let Some(i) = hit_label(x) {
@@ -109,6 +110,21 @@ impl App {
             return;
         }
         if self.mode != Mode::Normal {
+            return;
+        }
+        if mods.contains(KeyModifiers::CONTROL) {
+            // Control clicks open links in place; anything else selects
+            // nothing and leaves the caret where it was.
+            if let Some(target) = self.link_at(x, y) {
+                match super::normal::open_url(&target) {
+                    Ok(()) => {
+                        self.message = format!("Opened {target}");
+                    }
+                    Err(err) => {
+                        self.message = err;
+                    }
+                }
+            }
             return;
         }
         match &mut self.doc {
@@ -333,6 +349,26 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Link target under the absolute cell `(x, y)`, for control
+    /// clicks. Wrapped pieces render from pane column zero, so the
+    /// piece-relative column converts back to a line-relative offset.
+    fn link_at(&mut self, x: u16, y: u16) -> Option<String> {
+        let (line, seg, col) = self.prose_position(x, y)?;
+        let width = (self.view.text_w as usize).saturating_sub(2).max(1);
+        let surface = self.doc.prose_surface()?;
+        let rel = if surface.wrap_enabled() {
+            let at = surface.wrapped_char_at(line, width, seg, col)?;
+            at - surface.line_char_start(line)
+        } else {
+            surface.char_off_for_display_col(line, col)
+        };
+        self.doc
+            .link_spans(line)
+            .into_iter()
+            .find(|s| rel >= s.start && rel < s.end)
+            .and_then(|s| s.target)
     }
 
     /// Grid cell for a press at absolute `(x, y)`, when the cell maps

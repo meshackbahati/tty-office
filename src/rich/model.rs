@@ -66,6 +66,54 @@ pub(super) fn set_paragraph_heading(
     Ok(())
 }
 
+/// One hyperlink run within a paragraph: character range in the
+/// paragraph text plus its resolved target, if external.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkSpan {
+    /// Char offset of the first character in the paragraph text.
+    pub start: usize,
+    /// Char offset one past the last character.
+    pub end: usize,
+    /// Resolved URL, or `None` for internal anchors and missing targets.
+    pub target: Option<String>,
+}
+
+/// Hyperlink runs of body paragraph `index` with paragraph-relative
+/// character ranges matching the projected surface lines. When the
+/// walked text does not add up to the paragraph text, the spans come
+/// back empty rather than misaligned.
+pub(super) fn paragraph_links(model: &rdocx::Document, index: usize) -> Vec<LinkSpan> {
+    let Some(paragraph) = model.paragraph(index) else {
+        return Vec::new();
+    };
+    let mut spans = Vec::new();
+    let mut offset = 0usize;
+    for item in paragraph.items() {
+        match item {
+            rdocx::ParagraphItemRef::Run(run) => {
+                offset += run.text().chars().count();
+            }
+            rdocx::ParagraphItemRef::Hyperlink(link) => {
+                let len = link.text().chars().count();
+                let target = link
+                    .relationship_id()
+                    .and_then(|rel| model.hyperlink_url(rel));
+                spans.push(LinkSpan {
+                    start: offset,
+                    end: offset + len,
+                    target,
+                });
+                offset += len;
+            }
+            _ => {}
+        }
+    }
+    if offset != paragraph.text().chars().count() {
+        return Vec::new();
+    }
+    spans
+}
+
 /// Rewrite body paragraph `index` so its plain text equals `text`.
 ///
 /// Empty or text-only paragraphs are updated in place through the public run

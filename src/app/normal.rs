@@ -100,6 +100,7 @@ impl App {
             }
             Action::FillDown => self.fill_cells(true),
             Action::FillRight => self.fill_cells(false),
+            Action::OpenLink => self.open_link(),
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
                 let name = self.doc.display_name();
@@ -205,6 +206,34 @@ impl App {
         }
     }
 
+    /// Open the hyperlink under the cursor with the system handler.
+    fn open_link(&mut self) {
+        let target = (|| {
+            let surface = self.doc.prose_surface()?;
+            let line = surface.cursor_line();
+            let at = surface.cursor_char();
+            let base = surface.line_char_start(line);
+            self.doc
+                .link_spans(line)
+                .into_iter()
+                .find(|s| at >= base + s.start && at < base + s.end)
+                .and_then(|s| s.target)
+        })();
+        match target {
+            Some(target) => match open_url(&target) {
+                Ok(()) => {
+                    self.message = format!("Opened {target}");
+                }
+                Err(err) => {
+                    self.message = err;
+                }
+            },
+            None => {
+                self.message = "No link under cursor".to_string();
+            }
+        }
+    }
+
     /// Fill from the leading cell or edge for `FillDown` (`down`) and
     /// `FillRight`, reporting the outcome on the message line.
     fn fill_cells(&mut self, down: bool) {
@@ -232,4 +261,34 @@ impl App {
             self.message = format!("Filled {filled} cell{plural}");
         }
     }
+}
+
+/// Hand `target` to the system URL handler without blocking the loop.
+/// Only web and mail targets go out; anything else reports instead of
+/// guessing what the desktop would do with it.
+pub(crate) fn open_url(target: &str) -> Result<(), String> {
+    let lower = target.to_lowercase();
+    if !(lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:"))
+    {
+        return Err(format!("Unsupported link target: {target}"));
+    }
+    let mut command = if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+    } else if cfg!(target_os = "windows") {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/c", "start", "", target]);
+        return command
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| format!("Could not open link: {err}"));
+    } else {
+        std::process::Command::new("xdg-open")
+    };
+    command
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("Could not open link: {err}"))
 }

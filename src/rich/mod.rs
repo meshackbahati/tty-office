@@ -16,6 +16,7 @@ use crate::text::TextDocument;
 
 mod model;
 
+pub(crate) use model::LinkSpan;
 use model::{load_model, project_body_paragraphs, set_paragraph_text};
 
 /// On-disk package kind for a rich document.
@@ -150,6 +151,12 @@ impl RichDocument {
     /// read as no heading.
     pub fn heading_at(&self, line: usize) -> Option<u8> {
         model::paragraph_heading(&self.model, line)
+    }
+
+    /// Hyperlink runs of the paragraph behind surface `line`, with
+    /// paragraph-relative ranges matching surface character indices.
+    pub fn link_spans(&self, line: usize) -> Vec<model::LinkSpan> {
+        model::paragraph_links(&self.model, line)
     }
 
     /// Apply Heading `level` to the cursor paragraph. Unsaved surface

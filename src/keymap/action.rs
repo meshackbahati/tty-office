@@ -66,6 +66,8 @@ pub enum Action {
     ToggleItalic,
     /// Apply a heading level to the cursor paragraph in word documents.
     ApplyHeading(u8),
+    /// Open the hyperlink under the cursor with the system handler.
+    OpenLink,
     /// Export to PDF, HTML, or Markdown; format follows the path extension.
     Export,
     /// Insert a literal character.
@@ -125,6 +127,7 @@ pub fn describe(action: &Action) -> String {
         Action::ToggleBold => "Bold (**)".into(),
         Action::ToggleItalic => "Italic (*)".into(),
         Action::ApplyHeading(level) => format!("Heading {level}"),
+        Action::OpenLink => "Open link".into(),
         Action::Export => "Export (PDF, HTML, Markdown)".into(),
         Action::Insert(_) => "Insert character".into(),
         Action::InsertNewline => "New line".into(),
@@ -214,6 +217,7 @@ pub fn action_name(action: &Action) -> Option<&'static str> {
         ApplyHeading(8) => "heading_8",
         ApplyHeading(9) => "heading_9",
         ApplyHeading(_) => return None,
+        OpenLink => "open_link",
         Export => "export",
         Insert(_) => return None,
         InsertNewline => "insert_newline",
@@ -271,6 +275,7 @@ pub(crate) fn action_from_name(name: &str) -> Option<Action> {
         "heading_7" => ApplyHeading(7),
         "heading_8" => ApplyHeading(8),
         "heading_9" => ApplyHeading(9),
+        "open_link" => OpenLink,
         "export" => Export,
         "insert_newline" => InsertNewline,
         "backspace" => Backspace,

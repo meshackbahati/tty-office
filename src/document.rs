@@ -107,6 +107,17 @@ impl Document {
         }
     }
 
+    /// Hyperlink runs of a prose line, for word documents; anything else
+    /// carries no links.
+    pub fn link_spans(&self, line: usize) -> Vec<crate::rich::LinkSpan> {
+        match self {
+            Document::Text(_) => Vec::new(),
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.link_spans(line),
+            #[cfg(feature = "xlsx")]
+            Document::Sheet(_) => Vec::new(),
+        }
+    }
     /// Mutable sheet document when this variant is a spreadsheet.    #[cfg(feature = "xlsx")]
     pub fn sheet_mut(&mut self) -> Option<&mut SheetDocument> {
         match self {
