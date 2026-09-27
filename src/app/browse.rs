@@ -31,10 +31,23 @@ pub(crate) struct BrowseState {
 impl BrowseState {
     /// Read `dir`, listing directories before files, each alphabetical.
     /// Unreadable directories yield an empty listing rather than an error
-    /// the caller must thread through the event loop.
+    /// the caller must thread through the event loop. The directory
+    /// canonicalizes first so ascending always has a parent to reach;
+    /// without that, relative paths bottomed out at an empty string and
+    /// the browser visibly stuck.
     pub fn open_dir(dir: &Path) -> Self {
+        let dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
         let mut entries = Vec::new();
-        if let Ok(read) = std::fs::read_dir(dir) {
+        // A parent row keeps mouse users moving upward too; the filter
+        // below applies to it like any other entry.
+        if let Some(parent) = dir.parent() {
+            entries.push(BrowseEntry {
+                name: "..".to_string(),
+                path: parent.to_path_buf(),
+                is_dir: true,
+            });
+        }
+        if let Ok(read) = std::fs::read_dir(&dir) {
             for entry in read.flatten() {
                 let path = entry.path();
                 let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {

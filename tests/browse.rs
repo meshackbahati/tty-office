@@ -128,11 +128,25 @@ fn wheel_scrolls_the_browser_selection() {
         row: 4,
         modifiers: KeyModifiers::NONE,
     });
-    // One notch moves three rows from .git to docs; entering the
+    // One notch moves three rows from the parent entry; entering the
     // directory proves the selection followed the wheel rather than
     // the document scroll.
     app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.mode, Mode::Browse);
     let text = drawn(&mut app);
-    assert!(text.contains("FORMATS.md"), "wheel did not move: {text}");
+    assert!(text.contains("/benches"), "wheel did not move: {text}");
+}
+
+#[test]
+fn parent_row_ascends_with_enter() {
+    let mut app = plain_app();
+    app.handle_key(ctrl('o'));
+    // Selected row 0 is always the parent entry with an empty filter.
+    app.handle_key(key(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.mode, Mode::Browse);
+    let text = drawn(&mut app);
+    assert!(
+        text.contains("applications"),
+        "did not ascend to the parent: {text}"
+    );
 }
