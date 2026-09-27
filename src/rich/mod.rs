@@ -145,6 +145,28 @@ impl RichDocument {
         &self.surface
     }
 
+    /// Heading level (1-9) of the paragraph behind surface `line`, from
+    /// the package style id. Documents that never styled the paragraph
+    /// read as no heading.
+    pub fn heading_at(&self, line: usize) -> Option<u8> {
+        model::paragraph_heading(&self.model, line)
+    }
+
+    /// Apply Heading `level` to the cursor paragraph. Unsaved surface
+    /// text syncs into the model first so fresh documents style
+    /// correctly; the surface stays dirty so the style saves with
+    /// the next write.
+    pub fn apply_heading(&mut self, level: u8) -> Result<(), String> {
+        if self.surface.is_dirty() {
+            self.sync_surface_into_model()
+                .map_err(|err| err.to_string())?;
+        }
+        let line = self.surface.cursor_line();
+        model::set_paragraph_heading(&mut self.model, line, level)?;
+        self.surface.mark_dirty();
+        Ok(())
+    }
+
     /// First visible line index.
     pub fn rowoff(&self) -> usize {
         self.surface.rowoff()

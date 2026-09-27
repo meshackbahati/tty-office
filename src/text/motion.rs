@@ -283,7 +283,8 @@ impl TextDocument {
         self.set_cursor(at, extend);
     }
 
-    pub(crate) fn move_vertical(&mut self, delta: i32, extend: bool) {        let line = self.cursor_line() as i64;
+    pub(crate) fn move_vertical(&mut self, delta: i32, extend: bool) {
+        let line = self.cursor_line() as i64;
         let target = (line + i64::from(delta)).clamp(0, self.line_count() as i64 - 1) as usize;
         let goal = self.goal_col;
         let off = self.char_off_for_display_col(target, goal);

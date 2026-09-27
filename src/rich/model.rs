@@ -41,6 +41,31 @@ pub(super) fn project_body_paragraphs(model: &rdocx::Document) -> String {
     out
 }
 
+/// Heading level (1-9) of body paragraph `index`, from its style id.
+/// Anything unstylized or exotic reads as no heading.
+pub(super) fn paragraph_heading(model: &rdocx::Document, index: usize) -> Option<u8> {
+    let style = model.paragraph(index)?.style_id()?.to_string();
+    let level: u8 = style.strip_prefix("Heading")?.parse().ok()?;
+    (1..=9).contains(&level).then_some(level)
+}
+
+/// Set body paragraph `index` to Heading `level`, creating nothing: the
+/// caller syncs the surface first so fresh documents style correctly.
+pub(super) fn set_paragraph_heading(
+    model: &mut rdocx::Document,
+    index: usize,
+    level: u8,
+) -> Result<(), String> {
+    if !(1..=9).contains(&level) {
+        return Err(format!("heading level must be 1-9, got {level}"));
+    }
+    let Some(mut paragraph) = model.paragraph_mut(index) else {
+        return Err(format!("body paragraph {index} is out of range"));
+    };
+    paragraph.set_style(&format!("Heading{level}"));
+    Ok(())
+}
+
 /// Rewrite body paragraph `index` so its plain text equals `text`.
 ///
 /// Empty or text-only paragraphs are updated in place through the public run

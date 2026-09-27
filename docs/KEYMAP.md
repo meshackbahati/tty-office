@@ -26,6 +26,9 @@ keep working unless rebound by name.
 | `save`, `save_as`, `read_file`, `find`, `replace` |
 | `cut_line`, `uncut`, `show_position`, `help` |
 | `undo`, `redo`, `select_all`, `toggle_bold`, `toggle_italic`, `export` |
+| `heading_1` to `heading_9` |
+| `move_word_left`, `move_word_right` |
+| `extend_word_left`, `extend_word_right` |
 | `insert_newline`, `backspace`, `delete_forward` |
 | `move_left`, `move_right`, `move_up`, `move_down` |
 | `move_home`, `move_end`, `move_page_up`, `move_page_down` |
@@ -83,6 +86,9 @@ Ctrl+S saves. Muscle memory from VS Code transfers directly.
 | Alt+B | Toggle Markdown bold (`**`) around the selection. |
 | Alt+I | Toggle Markdown italic (`*`) around the selection. |
 | Ctrl+P | Export to PDF, HTML, or Markdown. Format follows the path extension. |
+| Ctrl+1 to Ctrl+9 | Apply Heading 1 to 9 to the cursor paragraph in word documents. |
+| Ctrl+Left, Ctrl+Right | Move by word. |
+| Ctrl+Shift+Left, Ctrl+Shift+Right | Select by word. |
 
 ## Motion and selection
 

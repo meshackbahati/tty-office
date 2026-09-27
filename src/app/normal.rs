@@ -180,6 +180,20 @@ impl App {
             Action::SelectAll => self.doc.select_all(),
             Action::ToggleBold => self.wrap_selection("**"),
             Action::ToggleItalic => self.wrap_selection("*"),
+            Action::ApplyHeading(level) => match &mut self.doc {
+                #[cfg(feature = "docx")]
+                crate::Document::Rich(rich) => match rich.apply_heading(level) {
+                    Ok(()) => {
+                        self.message = format!("Heading {level}");
+                    }
+                    Err(err) => {
+                        self.message = err;
+                    }
+                },
+                _ => {
+                    self.message = "Headings need a word document".to_string();
+                }
+            },
             Action::Export => {
                 let suggestion = self.export_suggestion();
                 self.open_prompt(PromptKind::Export, "Export to: ", suggestion);

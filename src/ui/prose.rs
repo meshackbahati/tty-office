@@ -44,10 +44,12 @@ fn misspelled_style(error: Color) -> Style {
 }
 
 /// Per-character decoration for one rendered line.
+#[derive(Clone, Copy)]
 struct LineDecor<'a> {
     selection: Option<(usize, usize)>,
     misspelled: &'a [(usize, usize)],
     theme: Theme,
+    heading: Option<u8>,
 }
 
 /// Draw the text pane, dispatching wrapped and legacy renderers.
@@ -142,10 +144,11 @@ fn legacy_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, usi
     let step = view.step;
     let layout = view.layout;
     let theme = view.theme;
-    let decor = LineDecor {
+    let mut decor = LineDecor {
         selection: view.selection,
         misspelled: &view.misspelled,
         theme,
+        heading: None,
     };
     // Break rules above page starts consume viewport rows of their own, so
     // pull the window down until the caret and its rules fit. The stored
@@ -185,6 +188,7 @@ fn legacy_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, usi
             // mid-frame the pane simply stops drawing rather than panicking.
             break;
         };
+        decor.heading = app.doc.heading_at(cur);
         lines.push(frame_line(
             render_line(
                 &raw,
@@ -222,10 +226,11 @@ fn wrapped_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, us
     let step = view.step;
     let layout = view.layout;
     let theme = view.theme;
-    let decor = LineDecor {
+    let mut decor = LineDecor {
         selection: view.selection,
         misspelled: &view.misspelled,
         theme,
+        heading: None,
     };
     // The caret piece is shared by the pull-down and the row math.
     let cursor_seg = match app.doc.prose_surface() {
@@ -274,6 +279,7 @@ fn wrapped_lines(app: &mut App, view: &mut ProseView) -> (Vec<Line<'static>>, us
                 .skip(piece.start)
                 .take(piece.end - piece.start)
                 .collect();
+            decor.heading = app.doc.heading_at(cur);
             lines.push(frame_line(
                 render_line(
                     &chunk,
@@ -361,6 +367,13 @@ fn render_line<'a>(
             selected_style()
         } else if decor.misspelled.iter().any(|&(a, b)| idx >= a && idx < b) {
             misspelled_style(decor.theme.error)
+        } else if let Some(level) = decor.heading {
+            // Headings read bold; the top two levels take the accent.
+            let mut style = Style::default().add_modifier(Modifier::BOLD);
+            if level <= 2 {
+                style = style.fg(decor.theme.accent);
+            }
+            style
         } else {
             Style::default()
         }

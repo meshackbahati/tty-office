@@ -95,8 +95,19 @@ impl Document {
         }
     }
 
-    /// Mutable sheet document when this variant is a spreadsheet.
-    #[cfg(feature = "xlsx")]
+    /// Heading level (1-9) of a prose line, for word documents with
+    /// styled paragraphs; anything else reads as no heading.
+    pub fn heading_at(&self, line: usize) -> Option<u8> {
+        match self {
+            Document::Text(_) => None,
+            #[cfg(feature = "docx")]
+            Document::Rich(r) => r.heading_at(line),
+            #[cfg(feature = "xlsx")]
+            Document::Sheet(_) => None,
+        }
+    }
+
+    /// Mutable sheet document when this variant is a spreadsheet.    #[cfg(feature = "xlsx")]
     pub fn sheet_mut(&mut self) -> Option<&mut SheetDocument> {
         match self {
             Document::Sheet(s) => Some(s),
