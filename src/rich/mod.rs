@@ -69,11 +69,15 @@ impl fmt::Debug for RichDocument {
 impl RichDocument {
     /// Create an empty Word document that will be saved as `format`.
     pub fn new(format: RichFormat) -> Self {
+        let mut surface = TextDocument::new();
+        // Word documents wrap at the viewport width; plain text keeps
+        // the horizontal scroll contract.
+        surface.set_wrap(true);
         Self {
             format,
             path: None,
             model: rdocx::Document::new(),
-            surface: TextDocument::new(),
+            surface,
         }
     }
 
@@ -89,6 +93,7 @@ impl RichDocument {
         let model = load_model(path, format)?;
         let projection = project_body_paragraphs(&model);
         let mut surface = TextDocument::new();
+        surface.set_wrap(true);
         surface.load_clean(&projection);
         Ok(Self {
             format,

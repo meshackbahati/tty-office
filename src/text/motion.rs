@@ -54,6 +54,29 @@ impl TextDocument {
             return;
         }
         let line = self.cursor_line();
+        if self.wrap {
+            // Wrapped lines occupy the pane between the page side
+            // borders, so measure against the content width.
+            let width = view_w.saturating_sub(2).max(1);
+            if line < self.rowoff {
+                self.rowoff = line;
+            } else {
+                // Jump first: every line needs at least one row, so a
+                // cursor a full viewport past the offset cannot fit.
+                if line >= self.rowoff + view_h {
+                    self.rowoff = line + 1 - view_h;
+                }
+                while self.rowoff < line && self.display_span(self.rowoff, line, width) >= view_h {
+                    self.rowoff += 1;
+                }
+            }
+            self.coloff = 0;
+            let max_row = self.line_count().saturating_sub(1);
+            if self.rowoff > max_row {
+                self.rowoff = max_row;
+            }
+            return;
+        }
         if line < self.rowoff {
             self.rowoff = line;
         } else if line >= self.rowoff + view_h {
@@ -69,6 +92,55 @@ impl TextDocument {
         if self.rowoff > max_row {
             self.rowoff = max_row;
         }
+    }
+
+    /// Display rows covered by lines `from..=to` at `width`, ignoring
+    /// page rules, which the viewport accounts for on top.
+    fn display_span(&self, from: usize, to: usize, width: usize) -> usize {
+        (from..=to).map(|l| self.display_rows(l, width)).sum()
+    }
+
+    /// Move by display rows for wrapped surfaces: within the line across
+    /// pieces, else onto the edge piece of the neighbouring line, keeping
+    /// the goal column. Unwrapped surfaces keep line motion.
+    pub(crate) fn move_visual(&mut self, delta: i32, extend: bool, width: usize) {
+        if !self.wrap {
+            self.move_vertical(delta, extend);
+            return;
+        }
+        let width = width.max(1);
+        let goal = self.goal_col;
+        let line = self.cursor_line();
+        let count = self.line_count();
+        let cur = self.cursor_segment(width);
+        if delta < 0 {
+            if cur > 0 {
+                self.click_wrapped(line, width, cur - 1, goal, extend);
+                self.goal_col = goal;
+                return;
+            }
+            if line == 0 {
+                self.move_vertical(delta, extend);
+                return;
+            }
+            let prev = line - 1;
+            let last = self.wrap_segments(prev, width).len().saturating_sub(1);
+            self.click_wrapped(prev, width, last, goal, extend);
+            self.goal_col = goal;
+            return;
+        }
+        let segs = self.wrap_segments(line, width).len();
+        if cur + 1 < segs {
+            self.click_wrapped(line, width, cur + 1, goal, extend);
+            self.goal_col = goal;
+            return;
+        }
+        if line + 1 < count {
+            self.click_wrapped(line + 1, width, 0, goal, extend);
+            self.goal_col = goal;
+            return;
+        }
+        self.move_vertical(delta, extend);
     }
 
     pub(crate) fn set_cursor(&mut self, char_idx: usize, extend: bool) {

@@ -61,9 +61,11 @@ the rdocx conversion chain.
 A page is a fixed number of logical lines, fifty by default, shared
 identically by the viewport page rules, the status bar readout, and the
 PDF exporter. The number is configurable as `page_lines` in
-`~/.config/tty-office/config.toml`. The editor does not soft-wrap lines,
-so the mapping between screen breaks and printed breaks is exact rather
-than approximate. Physical paper measurement is not attempted in the
+`~/.config/tty-office/config.toml`. Word documents wrap lines at the
+viewport width, so long paragraphs occupy several display rows while
+the page model keeps counting logical lines; plain text and Markdown
+never wrap and scroll horizontally instead, which keeps their screen
+mapping exact. Physical paper measurement is not attempted in the
 terminal; exact print pagination lives in the PDF output.
 
 ## Proofing

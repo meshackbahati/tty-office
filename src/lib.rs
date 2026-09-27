@@ -52,7 +52,7 @@ pub use proof::{Misspelling, ProofEngine};
 pub use rich::{RichDocument, RichFormat};
 #[cfg(feature = "xlsx")]
 pub use sheet::{Cell, CellValue, SheetDocument, SheetFormat};
-pub use text::TextDocument;
+pub use text::{TextDocument, WrapSegment};
 pub use theme::Theme;
 pub use ui::draw;
 

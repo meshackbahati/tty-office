@@ -199,41 +199,81 @@ impl App {
     /// counting the page-rule rows the draw loop inserts and the blank
     /// rows the zoom level adds after every text line. Clicks on a rule
     /// row snap to the line below it.
-    fn display_row_to_line(&mut self, r: usize) -> Option<usize> {
+    fn display_row_to_line(&mut self, r: usize) -> Option<(usize, usize)> {
+        let step = 1 + self.zoom_step();
+        let width = (self.view.text_w as usize).saturating_sub(2).max(1);
         let surface = self.doc.prose_surface()?;
-        let (rowoff, line_count) = (surface.rowoff(), surface.line_count());
+        let (rowoff, line_count, wrapped) = (
+            surface.rowoff(),
+            surface.line_count(),
+            surface.wrap_enabled(),
+        );
         if line_count == 0 {
             return None;
         }
         let layout = self.page_layout();
-        let step = 1 + self.zoom_step();
+        if !wrapped {
+            let mut cur = rowoff;
+            let mut rule_drawn = false;
+            let mut i = 0usize;
+            loop {
+                if !rule_drawn && cur < line_count && cur > rowoff && layout.is_page_start(cur) {
+                    if i == r {
+                        return Some((cur, 0));
+                    }
+                    rule_drawn = true;
+                    i += 1;
+                    continue;
+                }
+                if i == r {
+                    return Some((cur.min(line_count - 1), 0));
+                }
+                if cur + 1 >= line_count {
+                    return Some((line_count - 1, 0));
+                }
+                cur += 1;
+                rule_drawn = false;
+                i += 1;
+            }
+        }
         let mut cur = rowoff;
         let mut rule_drawn = false;
         let mut i = 0usize;
         loop {
             if !rule_drawn && cur < line_count && cur > rowoff && layout.is_page_start(cur) {
                 if i == r {
-                    return Some(cur);
+                    return Some((cur, 0));
                 }
                 rule_drawn = true;
                 i += 1;
                 continue;
             }
-            if r < i + step {
-                return Some(cur.min(line_count - 1));
+            if cur >= line_count {
+                let last = line_count - 1;
+                let pieces = self
+                    .doc
+                    .prose_surface()
+                    .map(|s| s.wrap_segments(last, width).len())
+                    .unwrap_or(1);
+                return Some((last, pieces.saturating_sub(1)));
             }
-            if cur + 1 >= line_count {
-                return Some(line_count - 1);
+            let pieces = self
+                .doc
+                .prose_surface()
+                .map(|s| s.wrap_segments(cur, width).len().max(1))
+                .unwrap_or(1);
+            if r < i + pieces * step {
+                return Some((cur, (r - i) / step));
             }
+            i += pieces * step;
             cur += 1;
             rule_drawn = false;
-            i += step;
         }
     }
 
-    /// Line and display column for a press at absolute `(x, y)`, when the
-    /// cell maps into the prose surface.
-    fn prose_position(&mut self, x: u16, y: u16) -> Option<(usize, usize)> {
+    /// Line, wrapped piece, and piece-relative column for a press at
+    /// absolute `(x, y)`, when the cell maps into the prose surface.
+    fn prose_position(&mut self, x: u16, y: u16) -> Option<(usize, usize, usize)> {
         let view = self.view;
         // The left page border owns the first pane column; it selects
         // nothing, and content starts one cell to its right.
@@ -245,17 +285,29 @@ impl App {
         if r >= content_rows {
             return None;
         }
-        let line = self.display_row_to_line(r)?;
+        let (line, seg) = self.display_row_to_line(r)?;
         let surface = self.doc.prose_surface()?;
-        let col = (x - view.text_x - 1) as usize + surface.coloff();
-        Some((line, col))
+        if surface.wrap_enabled() {
+            // Every piece renders from pane column zero, so the click
+            // column is already piece-relative.
+            let col = (x - view.text_x - 1) as usize;
+            Some((line, seg, col))
+        } else {
+            let col = (x - view.text_x - 1) as usize + surface.coloff();
+            Some((line, 0, col))
+        }
     }
 
     /// Press on prose: place the caret and remember the drag origin.
     fn prose_press(&mut self, x: u16, y: u16) {
-        if let Some((line, col)) = self.prose_position(x, y) {
+        if let Some((line, seg, col)) = self.prose_position(x, y) {
             if let Some(surface) = self.doc.prose_surface() {
-                surface.click_at(line, col);
+                let width = (self.view.text_w as usize).saturating_sub(2).max(1);
+                if surface.wrap_enabled() {
+                    surface.click_wrapped(line, width, seg, col, false);
+                } else {
+                    surface.click_at(line, col);
+                }
                 let at = surface.cursor_char();
                 self.drag = Some(DragOrigin::Prose(at));
             }
@@ -265,9 +317,14 @@ impl App {
 
     /// Drag on prose: extend the selection from the press origin.
     fn prose_move(&mut self, x: u16, y: u16, origin: usize) {
-        if let Some((line, col)) = self.prose_position(x, y) {
+        if let Some((line, seg, col)) = self.prose_position(x, y) {
             if let Some(surface) = self.doc.prose_surface() {
-                surface.click_at(line, col);
+                let width = (self.view.text_w as usize).saturating_sub(2).max(1);
+                if surface.wrap_enabled() {
+                    surface.click_wrapped(line, width, seg, col, true);
+                } else {
+                    surface.click_at(line, col);
+                }
                 let at = surface.cursor_char();
                 if at == origin {
                     surface.set_cursor(at, false);

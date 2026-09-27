@@ -70,9 +70,10 @@ pub enum PromptKind {
 /// draw. Plain offsets keep the application shell free of renderer types.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct ViewRects {
-    /// Text pane origin and height.
+    /// Text pane origin and size.
     pub text_x: u16,
     pub text_y: u16,
+    pub text_w: u16,
     pub text_h: u16,
     /// Sidebar origin and width; zero width means hidden.
     pub side_x: u16,
@@ -282,6 +283,35 @@ impl App {
 
     pub(crate) fn apply_motion(&mut self, motion: Motion, extend: bool) {
         let page = self.view_h;
+        // Wrapped surfaces move by display rows, not document lines.
+        let wrapped = match self.doc.prose_surface() {
+            Some(surface) => surface.wrap_enabled(),
+            None => false,
+        };
+        if wrapped {
+            if let Some(surface) = self.doc.prose_surface() {
+                // Wrap math runs on the content width between the page
+                // side borders, not the full pane width.
+                let width = self.view_w.saturating_sub(2).max(1);
+                match motion {
+                    Motion::Up => surface.move_visual(-1, extend, width),
+                    Motion::Down => surface.move_visual(1, extend, width),
+                    Motion::PageUp => {
+                        for _ in 0..page.max(1) {
+                            surface.move_visual(-1, extend, width);
+                        }
+                    }
+                    Motion::PageDown => {
+                        for _ in 0..page.max(1) {
+                            surface.move_visual(1, extend, width);
+                        }
+                    }
+                    other => surface.move_cursor(other, extend),
+                }
+            }
+            self.scroll_to_cursor();
+            return;
+        }
         match motion {
             Motion::PageUp => {
                 for _ in 0..page {

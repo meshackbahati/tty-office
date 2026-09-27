@@ -7,10 +7,12 @@
 mod edit;
 mod find;
 mod motion;
+mod wrap;
 
 use std::path::{Path, PathBuf};
 
 use ropey::Rope;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::editor::{Cursor, Editor, Motion};
 use crate::error::DocumentError;
@@ -18,6 +20,7 @@ use crate::history::History;
 use crate::io::{load_rope, save_rope_atomic};
 
 pub use edit::Edit;
+pub use wrap::WrapSegment;
 
 /// Plain-text document with selection, viewport scroll, and undo history.
 #[derive(Debug)]
@@ -33,6 +36,8 @@ pub struct TextDocument {
     rowoff: usize,
     /// First visible display column.
     coloff: usize,
+    /// Wrap lines at the viewport width instead of scrolling them.
+    wrap: bool,
     /// Display column preferred by vertical motion.
     goal_col: usize,
     history: History,
@@ -54,6 +59,7 @@ impl TextDocument {
             anchor: None,
             rowoff: 0,
             coloff: 0,
+            wrap: false,
             goal_col: 0,
             history: History::new(),
             word_count: None,
@@ -72,6 +78,7 @@ impl TextDocument {
             anchor: None,
             rowoff: 0,
             coloff: 0,
+            wrap: false,
             goal_col: 0,
             history: History::new(),
             word_count: None,
@@ -147,6 +154,94 @@ impl TextDocument {
     /// First visible display column.
     pub fn coloff(&self) -> usize {
         self.coloff
+    }
+
+    /// Whether lines wrap at the viewport width (word documents) instead
+    /// of scrolling horizontally (plain text).
+    pub fn wrap_enabled(&self) -> bool {
+        self.wrap
+    }
+
+    /// Wrap lines at the viewport width or scroll them horizontally.
+    /// Enabling wrap parks the horizontal offset, since wrapped lines
+    /// never run past the edge.
+    pub fn set_wrap(&mut self, wrap: bool) {
+        self.wrap = wrap;
+        if wrap {
+            self.coloff = 0;
+        }
+    }
+
+    /// Wrapped pieces of `line` at `width` columns; exactly one piece
+    /// covering the line when wrapping is off.
+    pub fn wrap_segments(&self, line: usize, width: usize) -> Vec<WrapSegment> {
+        let text = self.line_text(line);
+        if !self.wrap {
+            return vec![WrapSegment {
+                end: text.chars().count(),
+                width: text.width(),
+                start: 0,
+            }];
+        }
+        wrap::wrap_str(&text, width)
+    }
+
+    /// Display rows `line` occupies at `width`; always at least one.
+    pub fn display_rows(&self, line: usize, width: usize) -> usize {
+        self.wrap_segments(line, width).len().max(1)
+    }
+
+    /// Index of the wrapped piece holding the cursor at `width`.
+    pub fn cursor_segment(&self, width: usize) -> usize {
+        if !self.wrap {
+            return 0;
+        }
+        let col = self.cursor_display_col();
+        let mut acc = 0usize;
+        let segments = self.wrap_segments(self.cursor_line(), width);
+        for (i, seg) in segments.iter().enumerate() {
+            acc += seg.width;
+            if col < acc {
+                return i;
+            }
+        }
+        segments.len().saturating_sub(1)
+    }
+
+    /// Place the caret at display column `col` within piece `seg` of
+    /// `line` for wrapped mouse clicks, clamping into the buffer.
+    /// `extend` keeps the selection anchor for drag selections.
+    pub fn click_wrapped(
+        &mut self,
+        line: usize,
+        width: usize,
+        seg: usize,
+        col: usize,
+        extend: bool,
+    ) {
+        let line = line.min(self.line_count().saturating_sub(1));
+        let segments = self.wrap_segments(line, width);
+        let seg = segments.get(seg).or(segments.last());
+        let Some(seg) = seg else {
+            return;
+        };
+        let text = self.line_text(line);
+        let piece: Vec<char> = text
+            .chars()
+            .skip(seg.start)
+            .take(seg.end - seg.start)
+            .collect();
+        let mut taken = 0usize;
+        let mut w = 0usize;
+        while taken < piece.len() {
+            let cw = piece[taken].width().unwrap_or(0);
+            if w + cw > col {
+                break;
+            }
+            w += cw;
+            taken += 1;
+        }
+        self.set_cursor(self.line_char_start(line) + seg.start + taken, extend);
     }
 
     /// Character index of the cursor head.
