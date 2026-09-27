@@ -44,3 +44,12 @@ fn corrupt_pdf_errors() {
     std::fs::write(&path, "not a pdf at all").expect("write fixture");
     assert!(open(&path).is_err());
 }
+
+#[test]
+fn multipage_pdf_keeps_page_separators() {
+    let doc = open(&fixture("sample2.pdf")).expect("open pdf");
+    let text = doc.text_projection();
+    assert!(text.contains("Line 1"), "first page missing");
+    assert!(text.contains("Line 60"), "second page missing");
+    assert!(text.contains("PDF page 2"), "separator missing: {text}");
+}

@@ -87,6 +87,20 @@ fn main() -> anyhow::Result<()> {
         export(&mut doc, &root.join("sample.pdf"))?;
         println!("sample.pdf written");
     }
+    // A two-page PDF: sixty lines paginate on the fifty-line default.
+    #[cfg(feature = "pdf")]
+    {
+        let long: String = (1..=60)
+            .map(|i| format!("Line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let long_path = root.join("long.txt");
+        std::fs::write(&long_path, &long)?;
+        let mut doc = open(&long_path)?;
+        export(&mut doc, &root.join("sample2.pdf"))?;
+        std::fs::remove_file(&long_path)?;
+        println!("sample2.pdf written");
+    }
     Ok(())
 }
 

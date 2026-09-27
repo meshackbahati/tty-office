@@ -495,19 +495,33 @@ pub fn open(path: &Path) -> Result<Document, DocumentError> {
     }
 }
 
-/// Open a PDF as extracted text for viewing. The buffer carries no path,
-/// so saving always passes through Save As instead of overwriting the
-/// PDF with plain text.
+/// Open a PDF as extracted text for viewing. Pages extract separately
+/// behind a visible separator, so multi-page documents keep their page
+/// structure instead of concatenating. The buffer carries no path, so
+/// saving always passes through Save As instead of overwriting the PDF
+/// with plain text.
+///
+/// Layout-preserving rendering (columns, tables, exact spacing) needs
+/// positioned glyphs, which the current extractor does not expose; the
+/// roadmap covers a poppler-backed image view for graphics-capable
+/// terminals and keeps this text view for pure TTY.
 #[cfg(feature = "pdf")]
 fn view_pdf(path: &Path) -> Result<Document, DocumentError> {
     let doc = lopdf::Document::load(path).map_err(|err| DocumentError::Parse(err.to_string()))?;
     let numbers: Vec<u32> = doc.get_pages().keys().copied().collect();
-    let text = doc
-        .extract_text(&numbers)
-        .map_err(|err| DocumentError::Parse(err.to_string()))?;
+    let mut body = String::new();
+    for (i, page) in numbers.iter().enumerate() {
+        let text = doc
+            .extract_text(&[*page])
+            .map_err(|err| DocumentError::Parse(err.to_string()))?;
+        if i > 0 {
+            body.push_str(&format!("\n\u{2500}\u{2500} PDF page {} \u{2500}\n", i + 1));
+        }
+        body.push_str(&text);
+    }
     let mut t = TextDocument::new();
-    if !text.is_empty() {
-        t.insert_str(&text);
+    if !body.is_empty() {
+        t.insert_str(&body);
     }
     Ok(Document::Text(t))
 }
