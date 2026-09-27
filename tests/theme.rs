@@ -22,7 +22,7 @@ fn plain_app() -> App {
 fn alt_t_cycles_presets_and_wraps() {
     let mut app = plain_app();
     assert_eq!(app.theme(), Theme::MONO);
-    let mut names = vec!["Ocean", "Ember", "Forest", "Mono"];
+    let mut names = vec!["Ocean", "Ember", "Forest", "Paper", "Mono"];
     for expected in names.drain(..) {
         app.handle_key(alt('t'));
         assert_eq!(app.theme().name, expected);
@@ -60,4 +60,33 @@ fn sidebar_shows_the_current_theme() {
         text.push('\n');
     }
     assert!(text.contains("Theme: Ocean"), "theme row missing: {text}");
+}
+
+#[test]
+fn paper_body_uses_page_colors() {
+    let mut app = plain_app();
+    for _ in 0..4 {
+        app.handle_key(alt('t'));
+    }
+    assert_eq!(app.theme(), Theme::PAPER);
+    let backend = TestBackend::new(30, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    // First text row past the menu, hairline, and page border; column
+    // 1 is the border itself, so the wash is asserted on content.
+    let border = &term.backend().buffer()[(1, 2)];
+    assert_eq!(border.bg, Color::White);
+    let cell = &term.backend().buffer()[(2, 2)];
+    assert_eq!(cell.bg, Color::White);
+    assert_eq!(cell.fg, Color::Black);
+}
+
+#[test]
+fn mono_body_keeps_terminal_colors() {
+    let mut app = plain_app();
+    let backend = TestBackend::new(30, 8);
+    let mut term = Terminal::new(backend).expect("test terminal");
+    term.draw(|frame| draw(frame, &mut app)).expect("draw");
+    let cell = &term.backend().buffer()[(1, 2)];
+    assert_eq!(cell.bg, Color::Reset);
 }

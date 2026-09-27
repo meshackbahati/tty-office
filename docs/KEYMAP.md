@@ -221,7 +221,8 @@ further. The status bar shows the percentage while zoomed.
 ## Themes
 
 Four chrome palettes ship with the suite: Mono, Ocean, Ember, and
-Forest. Alt+T steps through them for the session, and
+Forest, plus Paper, which paints the prose page white on any
+terminal for the word-processor look. Alt+T steps through them for the session, and
 `theme = "ocean"` in `~/.config/tty-office/config.toml` sets the
 default; unknown names fall back to Mono. The sidebar names the
 current theme, and its row cycles as well.

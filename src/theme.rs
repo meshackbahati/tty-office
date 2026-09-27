@@ -20,6 +20,10 @@ pub struct Theme {
     pub status_bg: Color,
     /// Misspellings and other error marks.
     pub error: Color,
+    /// Page background for prose, or `None` for the terminal default.
+    pub page_bg: Option<Color>,
+    /// Page foreground for prose, or `None` for the terminal default.
+    pub page_fg: Option<Color>,
 }
 
 impl Theme {
@@ -30,6 +34,8 @@ impl Theme {
         dim: Color::DarkGray,
         status_bg: Color::Black,
         error: Color::Red,
+        page_bg: None,
+        page_fg: None,
     };
     /// Cool blues for the chrome.
     pub const OCEAN: Self = Self {
@@ -38,6 +44,8 @@ impl Theme {
         dim: Color::Blue,
         status_bg: Color::Black,
         error: Color::LightRed,
+        page_bg: None,
+        page_fg: None,
     };
     /// Warm ambers for the chrome.
     pub const EMBER: Self = Self {
@@ -46,6 +54,8 @@ impl Theme {
         dim: Color::Gray,
         status_bg: Color::Black,
         error: Color::LightRed,
+        page_bg: None,
+        page_fg: None,
     };
     /// Greens for the chrome.
     pub const FOREST: Self = Self {
@@ -54,10 +64,28 @@ impl Theme {
         dim: Color::DarkGray,
         status_bg: Color::Black,
         error: Color::Red,
+        page_bg: None,
+        page_fg: None,
+    };
+    /// White page on any terminal, the word-processor look.
+    pub const PAPER: Self = Self {
+        name: "Paper",
+        accent: Color::Blue,
+        dim: Color::DarkGray,
+        status_bg: Color::Black,
+        error: Color::Red,
+        page_bg: Some(Color::White),
+        page_fg: Some(Color::Black),
     };
 
     /// Presets in cycle order.
-    pub const ALL: [Self; 4] = [Self::MONO, Self::OCEAN, Self::EMBER, Self::FOREST];
+    pub const ALL: [Self; 5] = [
+        Self::MONO,
+        Self::OCEAN,
+        Self::EMBER,
+        Self::FOREST,
+        Self::PAPER,
+    ];
 
     /// Look up a preset by name, ignoring case; unknown names miss so the
     /// caller falls back to the default instead of failing to start.

@@ -339,7 +339,28 @@ fn page_rule(layout: &PageLayout, line: usize, width: usize, theme: Theme) -> Li
     let left = fill / 2;
     let right = fill - left;
     let text = format!("├{}{}{}┤", "─".repeat(left), label, "─".repeat(right));
-    Line::styled(text, Style::default().fg(theme.dim))
+    let mut line = Line::styled(text, Style::default().fg(theme.dim));
+    wash_line(&mut line, theme);
+    line
+}
+
+/// Base wash for page rows: the theme page colors fill only the fields
+/// spans leave unset, so explicit accents, selections, and errors keep
+/// their own hues while the page reads as one sheet.
+fn wash_line(line: &mut Line<'_>, theme: Theme) {
+    if theme.page_bg.is_none() && theme.page_fg.is_none() {
+        return;
+    }
+    let mut base = Style::default();
+    if let Some(bg) = theme.page_bg {
+        base = base.bg(bg);
+    }
+    if let Some(fg) = theme.page_fg {
+        base = base.fg(fg);
+    }
+    for span in &mut line.spans {
+        span.style = base.patch(span.style);
+    }
 }
 
 /// Wrap a rendered text line in the page side borders, padding short
@@ -347,18 +368,25 @@ fn page_rule(layout: &PageLayout, line: usize, width: usize, theme: Theme) -> Li
 fn frame_line<'a>(mut line: Line<'a>, content_w: usize, theme: Theme) -> Line<'a> {
     let pad = content_w.saturating_sub(line.width());
     let side = Style::default().fg(theme.dim);
-    let mut spans = Vec::with_capacity(line.spans.len() + 2);
+    let mut spans = Vec::with_capacity(line.spans.len() + 3);
     spans.push(Span::styled("│", side));
     spans.append(&mut line.spans);
-    spans.push(Span::styled(format!("{}│", " ".repeat(pad)), side));
-    Line::from(spans)
+    // Padding stays unstyled so the page wash owns it; only the border
+    // carries the dim color.
+    spans.push(Span::raw(" ".repeat(pad)));
+    spans.push(Span::styled("│", side));
+    let mut line = Line::from(spans);
+    wash_line(&mut line, theme);
+    line
 }
 
 /// Blank framed row for viewport space past the document end and for
 /// the blank rows zoom levels insert between lines.
 fn blank_frame(width: usize, theme: Theme) -> Line<'static> {
     let text = format!("│{}│", " ".repeat(width.saturating_sub(2)));
-    Line::styled(text, Style::default().fg(theme.dim))
+    let mut line = Line::styled(text, Style::default().fg(theme.dim));
+    wash_line(&mut line, theme);
+    line
 }
 
 fn render_line<'a>(
