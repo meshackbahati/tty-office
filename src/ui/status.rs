@@ -31,7 +31,7 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             if let crate::Document::Sheet(sheet) = &app.doc {
                 let (r, c) = sheet.cursor_cell();
                 let ref_str = crate::sheet::SheetDocument::cell_ref(r, c);
-                let left = Line::from(vec![
+                let mut left_spans = vec![
                     Span::styled(
                         format!(" {name}{dirty}"),
                         Style::default()
@@ -40,7 +40,17 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                     ),
                     Span::raw(" │ "),
                     Span::raw(format!("Cell {ref_str}")),
-                ]);
+                ];
+                if sheet.sheet_names().len() > 1 {
+                    let tab = sheet
+                        .sheet_names()
+                        .get(sheet.active_sheet())
+                        .cloned()
+                        .unwrap_or_default();
+                    left_spans.push(Span::raw(" │ "));
+                    left_spans.push(Span::raw(format!("Sheet {tab}")));
+                }
+                let left = Line::from(left_spans);
                 let mode = match app.mode {
                     Mode::Help => "HELP",
                     Mode::ConfirmQuit => "EXIT?",

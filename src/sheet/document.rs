@@ -15,7 +15,7 @@ use super::edit::{
 };
 use super::formula::{new_mirror, push_grid_to_mirror, reevaluate_all};
 use super::package::{
-    load_package, new_package, package_matches, sync_grid_into_package, write_package, Package,
+    load_all_sheets, new_package, package_matches, sync_grid_into_package, write_package, Package,
 };
 use crate::editor::{Cursor, Editor, Motion};
 use crate::error::DocumentError;
@@ -41,6 +41,29 @@ pub struct SheetDocument {
     pub(crate) redo: Vec<Vec<SheetEdit>>,
     /// Evaluation mirror in Excel dialect; sheet [`super::formula::MIRROR_SHEET`].
     pub(crate) mirror: formualizer::Workbook,
+    /// Name of the active sheet for the tab strip.
+    pub(crate) active_name: String,
+    /// Display index of the active sheet among all sheets.
+    pub(crate) active_idx: usize,
+    /// Inactive sheets parked in order around `active_idx`: the full
+    /// name list reads parked names before the index, then the active
+    /// name, then parked names from the index on.
+    parked: Vec<ParkedSheet>,
+}
+
+/// One inactive workbook sheet: grid, viewport, cursor, selection, and
+/// undo history, parked while another sheet is active.
+#[derive(Debug, Default)]
+struct ParkedSheet {
+    name: String,
+    cells: HashMap<(usize, usize), Cell>,
+    cursor_row: usize,
+    cursor_col: usize,
+    anchor: Option<(usize, usize)>,
+    rowoff: usize,
+    coloff: usize,
+    undo: Vec<Vec<SheetEdit>>,
+    redo: Vec<Vec<SheetEdit>>,
 }
 
 impl fmt::Debug for SheetDocument {
@@ -72,6 +95,9 @@ impl SheetDocument {
             undo: Vec::new(),
             redo: Vec::new(),
             mirror,
+            active_name: "Sheet1".to_string(),
+            active_idx: 0,
+            parked: Vec::new(),
         };
         doc.rebuild_mirror();
         doc
@@ -86,7 +112,19 @@ impl SheetDocument {
                     .unwrap_or_else(|| "unknown".to_string()),
             )
         })?;
-        let (package, cells) = load_package(path, format)?;
+        let (package, mut sheets) = load_all_sheets(path, format)?;
+        if sheets.is_empty() {
+            sheets.push(("Sheet1".to_string(), HashMap::new()));
+        }
+        let mut sheets = sheets.into_iter();
+        let (active_name, cells) = sheets.next().expect("sheet list is nonempty");
+        let parked = sheets
+            .map(|(name, cells)| ParkedSheet {
+                name,
+                cells,
+                ..Default::default()
+            })
+            .collect();
         let mut mirror = new_mirror();
         push_grid_to_mirror(&mut mirror, &cells);
         let mut doc = Self {
@@ -103,9 +141,78 @@ impl SheetDocument {
             undo: Vec::new(),
             redo: Vec::new(),
             mirror,
+            active_name,
+            active_idx: 0,
+            parked,
         };
         reevaluate_all(&mut doc.mirror, &mut doc.cells);
         Ok(doc)
+    }
+
+    /// Names of all sheets in display order.
+    pub fn sheet_names(&self) -> Vec<String> {
+        let mut out = Vec::with_capacity(self.parked.len() + 1);
+        for (i, parked) in self.parked.iter().enumerate() {
+            if i == self.active_idx {
+                out.push(self.active_name.clone());
+            }
+            out.push(parked.name.clone());
+        }
+        if self.active_idx >= self.parked.len() {
+            out.push(self.active_name.clone());
+        }
+        out
+    }
+
+    /// Display index of the active sheet.
+    pub fn active_sheet(&self) -> usize {
+        self.active_idx
+    }
+
+    /// Rendered strip cell for sheet `i`, mirroring the layout the
+    /// renderer and the mouse hit test share.
+    pub(crate) fn sheet_cell(&self, i: usize) -> Option<String> {
+        let title = self.sheet_names().get(i)?.clone();
+        let short: String = title.chars().take(20).collect();
+        let divider = if i == 0 { "" } else { "\u{2502}" };
+        Some(format!("{divider} {short} "))
+    }
+
+    /// Switch to sheet `target`, parking the active grid with its
+    /// cursor, selection, scroll, and undo history. Out-of-range
+    /// targets and the current sheet are ignored.
+    pub fn switch_sheet(&mut self, target: usize) {
+        let count = self.parked.len() + 1;
+        if target >= count || target == self.active_idx {
+            return;
+        }
+        // Park the active state at its slot, turning the background
+        // into the previous full list, then lift the target out.
+        let parked = ParkedSheet {
+            name: std::mem::take(&mut self.active_name),
+            cells: std::mem::take(&mut self.cells),
+            cursor_row: self.cursor_row,
+            cursor_col: self.cursor_col,
+            anchor: self.anchor,
+            rowoff: self.rowoff,
+            coloff: self.coloff,
+            undo: std::mem::take(&mut self.undo),
+            redo: std::mem::take(&mut self.redo),
+        };
+        self.parked.insert(self.active_idx, parked);
+        let next = self.parked.remove(target);
+        self.active_name = next.name;
+        self.cells = next.cells;
+        self.cursor_row = next.cursor_row;
+        self.cursor_col = next.cursor_col;
+        self.anchor = next.anchor;
+        self.rowoff = next.rowoff;
+        self.coloff = next.coloff;
+        self.undo = next.undo;
+        self.redo = next.redo;
+        self.active_idx = target;
+        // The mirror tracks one sheet; rebuild it for the lifted grid.
+        self.rebuild_mirror();
     }
 
     /// Adopt `path` as the save destination without reading or writing it.
@@ -274,7 +381,20 @@ impl SheetDocument {
             super::edit::prepare_rebuild(self, target_format);
         }
 
-        sync_grid_into_package(&mut self.package, &self.cells, self.format)?;
+        // Every sheet syncs into its own package sheet so background
+        // tabs survive the write; missing package sheets are created.
+        // Field-precise borrows keep the grid readable while the
+        // package mutates.
+        let count = self.parked.len() + 1;
+        for i in 0..count {
+            let (name, grid) = if i == self.active_idx {
+                (self.active_name.clone(), &self.cells)
+            } else {
+                let parked = &self.parked[if i < self.active_idx { i } else { i - 1 }];
+                (parked.name.clone(), &parked.cells)
+            };
+            sync_grid_into_package(&mut self.package, grid, self.format, i, &name)?;
+        }
         write_package(&mut self.package, target, self.format)?;
 
         self.path = Some(target.to_path_buf());

@@ -28,17 +28,27 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
     }
 
     // Snapshot grid geometry so the borrow of the sheet ends before render.
+    // The tab strip takes the last pane row once a second sheet exists,
+    // so scrolling measures the content height above it.
     let snapshot = {
         let Some(sheet) = app.doc.sheet_mut() else {
             frame.render_widget(Paragraph::new(""), area);
             return;
         };
-        sheet.scroll_to_cursor(height, width);
+        let tab_names = sheet.sheet_names();
+        let show_strip = tab_names.len() > 1;
+        let content_h = if show_strip {
+            height.saturating_sub(1).max(1)
+        } else {
+            height
+        };
+        sheet.scroll_to_cursor(content_h, width);
         let (cursor_row, cursor_col) = sheet.cursor_cell();
         let selection = sheet.selection_rect();
         let rowoff = sheet.rowoff();
         let coloff = sheet.coloff();
-        let visible_rows = height.saturating_sub(COL_HEADER_H).div_ceil(2);
+        let active_tab = sheet.active_sheet();
+        let visible_rows = content_h.saturating_sub(COL_HEADER_H).div_ceil(2);
         let visible_cols = width.saturating_sub(ROW_GUTTER).div_ceil(CELL_STRIDE);
         let mut rows: Vec<Vec<String>> = Vec::with_capacity(visible_rows);
         for r in rowoff..rowoff + visible_rows {
@@ -61,9 +71,23 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             coloff,
             rows,
             visible_cols,
+            tab_names,
+            active_tab,
+            show_strip,
         )
     };
-    let (cursor_row, cursor_col, selection, rowoff, coloff, mut rows, visible_cols) = snapshot;
+    let (
+        cursor_row,
+        cursor_col,
+        selection,
+        rowoff,
+        coloff,
+        mut rows,
+        visible_cols,
+        tab_names,
+        active_tab,
+        show_strip,
+    ) = snapshot;
     // While the cell prompt is open, the typed text echoes inside the
     // cursor cell itself rather than only on the prompt line below.
     if matches!(app.mode, Mode::Prompt(PromptKind::CellEdit))
@@ -75,6 +99,14 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             rows[vr][vc] = app.prompt_buf.clone();
         }
     }
+
+    // Content rows budget the strip row when several sheets share the
+    // pane; the block border always owns the first pane row.
+    let budget = if show_strip {
+        height.saturating_sub(2).max(1)
+    } else {
+        height
+    };
 
     let mut lines: Vec<Line<'static>> = Vec::with_capacity(height);
 
@@ -94,10 +126,15 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             header.push_str(&label[..CELL_WIDTH.min(label.len())]);
         }
         lines.push(Line::from(header));
-        lines.push(grid_separator(visible_cols, theme));
+        if lines.len() < budget {
+            lines.push(grid_separator(visible_cols, theme));
+        }
     }
 
     for (i, row_vals) in rows.iter().enumerate() {
+        if lines.len() >= budget {
+            break;
+        }
         let r = rowoff + i;
         let mut spans: Vec<Span<'static>> = Vec::new();
         let row_num = format!("{:>5} ", r + 1);
@@ -120,7 +157,14 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             spans.push(Span::styled(text, style));
         }
         lines.push(Line::from(spans));
-        lines.push(grid_separator(visible_cols, theme));
+        if lines.len() < budget {
+            lines.push(grid_separator(visible_cols, theme));
+        }
+    }
+
+    // Sheet tab strip on the last pane row, mirroring the document tabs.
+    if show_strip {
+        lines.push(sheet_tab_strip(&tab_names, active_tab, width));
     }
 
     let paragraph = Paragraph::new(lines).block(
@@ -146,6 +190,29 @@ pub(super) fn draw_sheet(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
             }
         }
     }
+}
+
+/// Sheet tab strip: names with dividers, the active sheet reversed.
+fn sheet_tab_strip(names: &[String], active: usize, width: usize) -> Line<'static> {
+    use unicode_width::UnicodeWidthStr;
+    let mut spans = Vec::new();
+    let mut used = 0usize;
+    for (i, name) in names.iter().enumerate() {
+        let short: String = name.chars().take(20).collect();
+        let divider = if i == 0 { "" } else { "\u{2502}" };
+        let cell = format!("{divider} {short} ");
+        if used + cell.width() + 4 > width {
+            spans.push(Span::raw(format!(" +{}", names.len() - i)));
+            break;
+        }
+        let mut style = Style::default();
+        if i == active {
+            style = style.add_modifier(Modifier::REVERSED);
+        }
+        used += cell.width();
+        spans.push(Span::styled(cell, style));
+    }
+    Line::from(spans)
 }
 
 /// Horizontal grid rule: gutter dashes plus one joint per column.

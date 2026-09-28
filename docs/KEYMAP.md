@@ -31,6 +31,7 @@ keep working unless rebound by name.
 | `open_link` |
 | `prev_page`, `next_page` |
 | `select_row`, `select_col` |
+| `prev_sheet`, `next_sheet` |
 | `move_word_left`, `move_word_right` |
 | `extend_word_left`, `extend_word_right` |
 | `insert_newline`, `backspace`, `delete_forward` |
@@ -133,6 +134,7 @@ cell operations rather than character insertion.
 | Tab | Move the cursor one column to the right. |
 | Alt+R | Select the cursor row. |
 | Alt+C | Select the cursor column. |
+| Alt+Shift+Left, Alt+Shift+Right | Previous and next workbook sheet. |
 | Printable keys | Start the cell edit prompt with that character. |
 | Backspace, Delete | Clear the selection or delete toward the cursor. |
 | Ctrl+U | Uncut: paste the cutbuffer into the cell edit. |
@@ -219,7 +221,8 @@ scrolls past a screenful either way.
 Clicking places the caret in text and on cells in grids, dragging
 extends the selection, and the wheel scrolls without moving the
 caret. Clicking a row number selects the row and clicking a column
-letter selects the column. Ctrl+click opens the hyperlink under the
+letter selects the column. Sheet tabs on the last grid row switch
+the workbook sheet on click. Ctrl+click opens the hyperlink under the
 pointer in word documents without moving the caret. The menu bar,
 dropdown items, sidebar rows, and tab cells are all clickable; a
 click outside an open dropdown dismisses it and still lands. Mouse

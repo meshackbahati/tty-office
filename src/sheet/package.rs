@@ -50,26 +50,38 @@ pub(crate) fn package_matches(package: &Package, format: SheetFormat) -> bool {
     )
 }
 
-pub(crate) fn load_package(
+pub(crate) fn load_all_sheets(
     path: &Path,
     format: SheetFormat,
-) -> Result<(Package, CellGrid), DocumentError> {
+) -> Result<(Package, Vec<(String, CellGrid)>), DocumentError> {
     match format {
         SheetFormat::Xlsx => {
             let book = umya_spreadsheet::reader::xlsx::read(path)
                 .map_err(|err| DocumentError::Parse(err.to_string()))?;
-            let cells = project_umya_sheet0(&book);
-            Ok((Package::Xlsx(book), cells))
+            let mut sheets = Vec::new();
+            for i in 0..sheet_count_umya(&book) {
+                sheets.push((sheet_name_umya(&book, i), project_umya_sheet(&book, i)));
+            }
+            if sheets.is_empty() {
+                sheets.push(("Sheet1".to_string(), HashMap::new()));
+            }
+            Ok((Package::Xlsx(book), sheets))
         }
         SheetFormat::Ods => {
             let book = spreadsheet_ods::read_ods(path)
                 .map_err(|err| DocumentError::Parse(err.to_string()))?;
-            let cells = project_ods_sheet0(&book);
-            Ok((Package::Ods(book), cells))
+            let mut sheets = Vec::new();
+            for i in 0..book.num_sheets() {
+                sheets.push((sheet_name_ods(&book, i), project_ods_sheet(&book, i)));
+            }
+            if sheets.is_empty() {
+                sheets.push(("Sheet1".to_string(), HashMap::new()));
+            }
+            Ok((Package::Ods(book), sheets))
         }
         SheetFormat::Xls => {
-            let cells = load_xls_grid(path)?;
-            Ok((Package::Xls, cells))
+            let sheets = load_xls_sheets(path)?;
+            Ok((Package::Xls, sheets))
         }
         SheetFormat::Csv => {
             let text =
@@ -77,14 +89,24 @@ pub(crate) fn load_package(
             // CSV parse errors cannot happen by construction, so every
             // readable file loads; formulas re-evaluate with the grid.
             let cells = super::csv::cells_from_rows(super::csv::parse_csv(&text));
-            Ok((Package::Csv, cells))
+            Ok((Package::Csv, vec![("Sheet1".to_string(), cells)]))
         }
     }
 }
 
-fn project_umya_sheet0(book: &umya_spreadsheet::Workbook) -> CellGrid {
+fn sheet_count_umya(book: &umya_spreadsheet::Workbook) -> usize {
+    book.sheet_count()
+}
+
+fn sheet_name_umya(book: &umya_spreadsheet::Workbook, idx: usize) -> String {
+    book.sheet(idx)
+        .map(|sheet| sheet.name().to_string())
+        .unwrap_or_else(|_| format!("Sheet{}", idx + 1))
+}
+
+fn project_umya_sheet(book: &umya_spreadsheet::Workbook, idx: usize) -> CellGrid {
     let mut cells = HashMap::new();
-    let Ok(sheet) = book.sheet(0) else {
+    let Ok(sheet) = book.sheet(idx) else {
         return cells;
     };
     for (&(row1, col1), cell) in sheet.collection_to_hashmap() {
@@ -126,13 +148,20 @@ fn umya_cell_value(cell: &umya_spreadsheet::Cell) -> CellValue {
     }
 }
 
-fn project_ods_sheet0(book: &spreadsheet_ods::WorkBook) -> CellGrid {
+fn sheet_name_ods(book: &spreadsheet_ods::WorkBook, idx: usize) -> String {
+    if idx >= book.num_sheets() {
+        return format!("Sheet{}", idx + 1);
+    }
+    book.sheet(idx).name().to_string()
+}
+
+fn project_ods_sheet(book: &spreadsheet_ods::WorkBook, idx: usize) -> CellGrid {
     use spreadsheet_ods::Value;
     let mut cells = HashMap::new();
-    if book.num_sheets() == 0 {
+    if idx >= book.num_sheets() {
         return cells;
     }
-    let sheet = book.sheet(0);
+    let sheet = book.sheet(idx);
     for ((row, col), content) in sheet.iter() {
         let value = match content.value() {
             Value::Empty => CellValue::Empty,
@@ -152,20 +181,31 @@ fn project_ods_sheet0(book: &spreadsheet_ods::WorkBook) -> CellGrid {
     cells
 }
 
-fn load_xls_grid(path: &Path) -> Result<CellGrid, DocumentError> {
-    use calamine::{open_workbook, Data, Reader, Xls};
+fn load_xls_sheets(path: &Path) -> Result<Vec<(String, CellGrid)>, DocumentError> {
+    use calamine::{open_workbook, Reader, Xls};
 
     let mut book: Xls<_> =
         open_workbook::<Xls<_>, _>(path).map_err(|err| DocumentError::Parse(err.to_string()))?;
-    let name = book
-        .sheet_names()
-        .into_iter()
-        .next()
-        .ok_or_else(|| DocumentError::Parse("workbook has no sheets".to_string()))?;
+    let names = book.sheet_names();
+    if names.is_empty() {
+        return Err(DocumentError::Parse("workbook has no sheets".to_string()));
+    }
+    let mut out = Vec::with_capacity(names.len());
+    for name in names {
+        out.push((name.clone(), project_xls_sheet(&mut book, &name)?));
+    }
+    Ok(out)
+}
+
+fn project_xls_sheet(
+    book: &mut calamine::Xls<std::io::BufReader<std::fs::File>>,
+    name: &str,
+) -> Result<CellGrid, DocumentError> {
+    use calamine::{Data, Reader};
 
     let mut cells = CellGrid::new();
     let range = book
-        .worksheet_range(&name)
+        .worksheet_range(name)
         .map_err(|err| DocumentError::Parse(err.to_string()))?;
     let start = range.start().unwrap_or((0, 0));
     for (dr, dc, data) in range.cells() {
@@ -186,7 +226,7 @@ fn load_xls_grid(path: &Path) -> Result<CellGrid, DocumentError> {
     }
 
     let formulas = book
-        .worksheet_formula(&name)
+        .worksheet_formula(name)
         .map_err(|err| DocumentError::Parse(err.to_string()))?;
     let fstart = formulas.start().unwrap_or((0, 0));
     for (dr, dc, formula) in formulas.cells() {
@@ -215,10 +255,12 @@ pub(crate) fn sync_grid_into_package(
     package: &mut Package,
     cells: &CellGrid,
     format: SheetFormat,
+    idx: usize,
+    name: &str,
 ) -> Result<(), DocumentError> {
     match (package, format) {
-        (Package::Xlsx(book), SheetFormat::Xlsx) => sync_umya(book, cells),
-        (Package::Ods(book), SheetFormat::Ods) => sync_ods(book, cells),
+        (Package::Xlsx(book), SheetFormat::Xlsx) => sync_umya(book, cells, idx, name),
+        (Package::Ods(book), SheetFormat::Ods) => sync_ods(book, cells, idx, name),
         (Package::Xls, _) => Err(DocumentError::Save {
             path: PathBuf::from("[xls]"),
             message: "binary .xls cannot be written; save as .xlsx or .ods".to_string(),
@@ -236,8 +278,19 @@ pub(crate) fn sync_grid_into_package(
     }
 }
 
-fn sync_umya(book: &mut umya_spreadsheet::Workbook, cells: &CellGrid) -> Result<(), DocumentError> {
-    let sheet = book.sheet_mut(0).map_err(|err| DocumentError::Save {
+fn sync_umya(
+    book: &mut umya_spreadsheet::Workbook,
+    cells: &CellGrid,
+    idx: usize,
+    name: &str,
+) -> Result<(), DocumentError> {
+    while sheet_count_umya(book) <= idx {
+        book.new_sheet(name).map_err(|err| DocumentError::Save {
+            path: PathBuf::from("[xlsx]"),
+            message: err.to_string(),
+        })?;
+    }
+    let sheet = book.sheet_mut(idx).map_err(|err| DocumentError::Save {
         path: PathBuf::from("[xlsx]"),
         message: err.to_string(),
     })?;
@@ -313,12 +366,20 @@ fn sync_umya(book: &mut umya_spreadsheet::Workbook, cells: &CellGrid) -> Result<
     Ok(())
 }
 
-fn sync_ods(book: &mut spreadsheet_ods::WorkBook, cells: &CellGrid) -> Result<(), DocumentError> {
+fn sync_ods(
+    book: &mut spreadsheet_ods::WorkBook,
+    cells: &CellGrid,
+    idx: usize,
+    name: &str,
+) -> Result<(), DocumentError> {
     use spreadsheet_ods::Value;
     if book.num_sheets() == 0 {
         book.push_sheet(spreadsheet_ods::Sheet::new("Sheet1"));
     }
-    let sheet = book.sheet_mut(0);
+    while book.num_sheets() <= idx {
+        book.push_sheet(spreadsheet_ods::Sheet::new(name));
+    }
+    let sheet = book.sheet_mut(idx);
     let stale: Vec<(u32, u32)> = sheet
         .iter()
         .map(|((r, c), _)| (r, c))

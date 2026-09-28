@@ -128,6 +128,13 @@ impl App {
             }
             return;
         }
+        #[cfg(feature = "xlsx")]
+        if let Some(i) = self.sheet_strip_hit(x, y) {
+            if let Document::Sheet(sheet) = &mut self.doc {
+                sheet.switch_sheet(i);
+            }
+            return;
+        }
         match &mut self.doc {
             Document::Text(_) => self.prose_press(x, y),
             #[cfg(feature = "docx")]
@@ -197,6 +204,32 @@ impl App {
         if already {
             self.browse_activate();
         }
+    }
+
+    /// Sheet index whose tab-strip cell contains `(x, y)`, when several
+    /// sheets share the pane and the press lands on its last row.
+    #[cfg(feature = "xlsx")]
+    fn sheet_strip_hit(&self, x: u16, y: u16) -> Option<usize> {
+        let Document::Sheet(sheet) = &self.doc else {
+            return None;
+        };
+        if sheet.sheet_names().len() < 2 {
+            return None;
+        }
+        if y != self.view.text_y + self.view.text_h.saturating_sub(1) {
+            return None;
+        }
+        // Strip cells start at the pane edge, not the frame edge.
+        let x = x.saturating_sub(self.view.text_x);
+        let mut at = 0u16;
+        for i in 0..sheet.sheet_names().len() {
+            let w = sheet.sheet_cell(i).map(|c| c.width() as u16).unwrap_or(0);
+            if x >= at && x < at + w {
+                return Some(i);
+            }
+            at += w;
+        }
+        None
     }
 
     /// Tab index whose strip cell contains column `x`, if any.

@@ -78,6 +78,10 @@ pub enum Action {
     SelectRow,
     /// Select the entire cursor column in spreadsheets.
     SelectCol,
+    /// Activate the previous workbook sheet, wrapping around.
+    PrevSheet,
+    /// Activate the next workbook sheet, wrapping around.
+    NextSheet,
     /// Export to PDF, HTML, or Markdown; format follows the path extension.
     Export,
     /// Insert a literal character.
@@ -143,6 +147,8 @@ pub fn describe(action: &Action) -> String {
         Action::FocusNext => "Focus next section".into(),
         Action::SelectRow => "Select row".into(),
         Action::SelectCol => "Select column".into(),
+        Action::PrevSheet => "Previous sheet".into(),
+        Action::NextSheet => "Next sheet".into(),
         Action::Export => "Export (PDF, HTML, Markdown)".into(),
         Action::Insert(_) => "Insert character".into(),
         Action::InsertNewline => "New line".into(),
@@ -238,6 +244,8 @@ pub fn action_name(action: &Action) -> Option<&'static str> {
         FocusNext => "focus_next",
         SelectRow => "select_row",
         SelectCol => "select_col",
+        PrevSheet => "prev_sheet",
+        NextSheet => "next_sheet",
         Export => "export",
         Insert(_) => return None,
         InsertNewline => "insert_newline",
@@ -301,6 +309,8 @@ pub(crate) fn action_from_name(name: &str) -> Option<Action> {
         "focus_next" => FocusNext,
         "select_row" => SelectRow,
         "select_col" => SelectCol,
+        "prev_sheet" => PrevSheet,
+        "next_sheet" => NextSheet,
         "export" => Export,
         "insert_newline" => InsertNewline,
         "backspace" => Backspace,

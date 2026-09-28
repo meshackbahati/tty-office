@@ -144,6 +144,8 @@ impl App {
             Action::PrevPage => self.goto_page(-1),
             Action::NextPage => self.goto_page(1),
             Action::SelectRow => self.sheet_select_axis(true),
+            Action::PrevSheet => self.switch_sheet(-1),
+            Action::NextSheet => self.switch_sheet(1),
             Action::SelectCol => self.sheet_select_axis(false),
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
@@ -402,6 +404,27 @@ impl App {
     #[cfg(not(feature = "xlsx"))]
     fn sheet_select_axis(&mut self, _row: bool) {
         self.message = "Row and column selection need a spreadsheet".to_string();
+    }
+
+    /// Switch the workbook sheet by `delta`, wrapping around, and
+    /// announce the landing sheet on the message line.
+    fn switch_sheet(&mut self, delta: i32) {
+        let (count, active) = match &self.doc {
+            crate::Document::Sheet(sheet) => (sheet.sheet_names().len(), sheet.active_sheet()),
+            _ => {
+                self.message = "Sheet switching needs a spreadsheet".to_string();
+                return;
+            }
+        };
+        if count < 2 {
+            return;
+        }
+        let next = (active as i32 + delta).rem_euclid(count as i32) as usize;
+        if let crate::Document::Sheet(sheet) = &mut self.doc {
+            sheet.switch_sheet(next);
+            let name = sheet.sheet_names().get(next).cloned().unwrap_or_default();
+            self.message = format!("Sheet {name}");
+        }
     }
 }
 
