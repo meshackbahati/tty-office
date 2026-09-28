@@ -12,6 +12,8 @@ mod open;
 mod prompts;
 #[cfg(feature = "xlsx")]
 mod sheet_keys;
+#[cfg(feature = "xlsx")]
+use sheet_keys::ChartData;
 pub(crate) mod sidebar;
 pub(crate) mod tabs;
 
@@ -40,6 +42,9 @@ pub enum Mode {
     Help,
     /// File browser overlay.
     Browse,
+    /// Chart overlay for the selected numbers.
+    #[cfg(feature = "xlsx")]
+    Chart,
 }
 
 /// Which chrome section owns single-key navigation. The text pane is
@@ -116,6 +121,9 @@ pub struct App {
     drag: Option<mouse::DragOrigin>,
     /// File browser session while the overlay owns the keyboard.
     pub(crate) browse: Option<browse::BrowseState>,
+    /// Charted points with a title while the overlay owns the keyboard.
+    #[cfg(feature = "xlsx")]
+    pub(crate) chart: Option<ChartData>,
     /// Section owning single-key navigation.
     pub(crate) focus: Focus,
     /// Highlighted sidebar row while the sidebar is focused.
@@ -177,6 +185,8 @@ impl App {
             view: ViewRects::default(),
             drag: None,
             browse: None,
+            #[cfg(feature = "xlsx")]
+            chart: None,
             focus: Focus::Text,
             side_sel: 0,
             zoom: 0,
@@ -257,6 +267,8 @@ impl App {
             Mode::Prompt(kind) => self.handle_prompt(kind, key),
             Mode::Help => self.handle_help(key),
             Mode::Browse => self.handle_browse(key),
+            #[cfg(feature = "xlsx")]
+            Mode::Chart => self.handle_chart(key),
         }
     }
 

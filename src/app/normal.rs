@@ -146,6 +146,12 @@ impl App {
             Action::SelectRow => self.sheet_select_axis(true),
             Action::PrevSheet => self.switch_sheet(-1),
             Action::NextSheet => self.switch_sheet(1),
+            #[cfg(feature = "xlsx")]
+            Action::ShowChart => self.chart_selection(),
+            #[cfg(not(feature = "xlsx"))]
+            Action::ShowChart => {
+                self.message = "Charts need a spreadsheet".to_string();
+            }
             Action::SelectCol => self.sheet_select_axis(false),
             Action::NewText => {
                 self.new_tab(super::sidebar::new_text_doc());
@@ -407,7 +413,10 @@ impl App {
     }
 
     /// Switch the workbook sheet by `delta`, wrapping around, and
-    /// announce the landing sheet on the message line.
+    /// announce the landing sheet on the message line. Without the
+    /// spreadsheet backend the action reports instead of matching a
+    /// variant that does not exist.
+    #[cfg(feature = "xlsx")]
     fn switch_sheet(&mut self, delta: i32) {
         let (count, active) = match &self.doc {
             crate::Document::Sheet(sheet) => (sheet.sheet_names().len(), sheet.active_sheet()),
@@ -425,6 +434,15 @@ impl App {
             let name = sheet.sheet_names().get(next).cloned().unwrap_or_default();
             self.message = format!("Sheet {name}");
         }
+    }
+
+    /// Switch the workbook sheet by `delta`, wrapping around, and
+    /// announce the landing sheet on the message line. Without the
+    /// spreadsheet backend the action reports instead of matching a
+    /// variant that does not exist.
+    #[cfg(not(feature = "xlsx"))]
+    fn switch_sheet(&mut self, _delta: i32) {
+        self.message = "Sheet switching needs a spreadsheet".to_string();
     }
 }
 

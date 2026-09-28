@@ -7,6 +7,8 @@
 //! using the same [`crate::page::PageLayout`] the PDF exporter chunks on.
 
 mod browse;
+#[cfg(feature = "xlsx")]
+mod chart;
 mod menu;
 mod prose;
 #[cfg(feature = "xlsx")]
@@ -101,6 +103,10 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     menu::draw_dropdown(frame, app);
     if app.mode == Mode::Browse {
         browse::draw_browse(frame, app, body);
+    }
+    #[cfg(feature = "xlsx")]
+    if app.mode == Mode::Chart {
+        chart::draw_chart(frame, app, text);
     }
 
     if app.mode == Mode::Help {

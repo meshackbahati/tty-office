@@ -56,6 +56,8 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
                     Mode::ConfirmQuit => "EXIT?",
                     Mode::Prompt(_) => "PROMPT",
                     Mode::Browse => "BROWSE",
+                    #[cfg(feature = "xlsx")]
+                    Mode::Chart => "CHART",
                     Mode::Normal => "EDIT",
                 };
                 render_status_bar(frame, area, left, mode, theme);
@@ -69,6 +71,8 @@ pub(super) fn draw_status(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         Mode::ConfirmQuit => "EXIT?",
         Mode::Prompt(_) => "PROMPT",
         Mode::Browse => "BROWSE",
+        #[cfg(feature = "xlsx")]
+        Mode::Chart => "CHART",
         Mode::Normal => "EDIT",
     };
     let left_spans = {

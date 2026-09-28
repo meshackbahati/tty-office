@@ -82,6 +82,8 @@ pub enum Action {
     PrevSheet,
     /// Activate the next workbook sheet, wrapping around.
     NextSheet,
+    /// Chart the selected numbers as a line graph overlay.
+    ShowChart,
     /// Export to PDF, HTML, or Markdown; format follows the path extension.
     Export,
     /// Insert a literal character.
@@ -149,6 +151,7 @@ pub fn describe(action: &Action) -> String {
         Action::SelectCol => "Select column".into(),
         Action::PrevSheet => "Previous sheet".into(),
         Action::NextSheet => "Next sheet".into(),
+        Action::ShowChart => "Chart selection".into(),
         Action::Export => "Export (PDF, HTML, Markdown)".into(),
         Action::Insert(_) => "Insert character".into(),
         Action::InsertNewline => "New line".into(),
@@ -246,6 +249,7 @@ pub fn action_name(action: &Action) -> Option<&'static str> {
         SelectCol => "select_col",
         PrevSheet => "prev_sheet",
         NextSheet => "next_sheet",
+        ShowChart => "show_chart",
         Export => "export",
         Insert(_) => return None,
         InsertNewline => "insert_newline",
@@ -311,6 +315,7 @@ pub(crate) fn action_from_name(name: &str) -> Option<Action> {
         "select_col" => SelectCol,
         "prev_sheet" => PrevSheet,
         "next_sheet" => NextSheet,
+        "show_chart" => ShowChart,
         "export" => Export,
         "insert_newline" => InsertNewline,
         "backspace" => Backspace,
